@@ -24,6 +24,8 @@ extern "C" {
 
 extern MyControllerConfig controllers[4];
 extern ControllerEventManager eventManager;
+// HIER wird das Objekt physikalisch erzeugt
+BuWizz buwizz;
 
 void myMainTask(void* p);
 static void initPins();
@@ -68,9 +70,6 @@ static void my_platform_init(int argc, const char** argv) {
 static void my_platform_on_init_complete(void) {
     logi("custom: on_init_complete()\n");
 
-    esp_bluedroid_enable();
-
-
     // Safe to call "unsafe" functions since they are called from BT thread
 
     // Start scanning
@@ -88,6 +87,9 @@ static void my_platform_on_init_complete(void) {
     initPins();
     // Deine Task starten
     xTaskCreate(myMainTask, "my_task", 4096, NULL, 5, NULL);
+
+    buwizz.init();// eventuell vor xtaskCreate fürs timing.
+
 
 }
 
@@ -293,10 +295,15 @@ void myMainTask(void* p) {
 
         eventManager.process();
 
-        // ⭐ BuWizz erst starten, wenn System stabil läuft
-        if (!buwizz_started && (now - buwizz_start_time > 1500000)) { // 1.5 Sekunden
-            ESP_LOGI("MAIN", "Starting BuWizz GATT client...");
-            test_buwizz_connect();
+        // // ⭐ BuWizz erst starten, wenn System stabil läuft
+        // if (!buwizz_started && (now - buwizz_start_time > 1500000)) { // 1.5 Sekunden
+        //     logi("Starting BuWizz GATT client...");
+        //     // test_buwizz_connect();
+        //     buwizz_started = true;
+        // }
+        buwizz.process();
+        if (!buwizz_started && (now - buwizz_start_time > 1500000)) {
+            buwizz.connect();
             buwizz_started = true;
         }
 
