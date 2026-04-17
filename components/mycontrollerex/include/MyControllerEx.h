@@ -63,7 +63,6 @@ public:
 protected:
     uni_gamepad_t gamepad{};
     bool hasGamepad = false;
-    bool connected = false;
 
     // Rohwerte
     int lx = 0, ly = 0;
@@ -87,7 +86,7 @@ protected:
     bool gyroCalibrated = false;
     bool gyroCalibrating = false;
 
-    static constexpr int GYRO_CALIB_SAMPLES = 500;
+    //static constexpr int GYRO_CALIB_SAMPLES = 500;
     uint64_t gyroCalibStart = 0;
     int gyroCalibCount = 0;
 

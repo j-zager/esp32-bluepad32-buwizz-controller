@@ -18,11 +18,18 @@ extern "C" {
 
 #include "MyControllerConfig.h"
 
-static MyControllerConfig controller;
+// Maximal 4 Controller
+static MyControllerConfig controllers[4];
+
+// Zuordnung: welcher Slot gehört welchem Device?
+static uni_hid_device_t* deviceForSlot[4] = { nullptr };
+
 
 
 void myMainTask(void* p);
 static void initPins();
+static int findFreeSlot();
+static int findSlotForDevice(uni_hid_device_t* d);
 
 // Custom "instance"
 typedef struct my_platform_instance_s {
@@ -106,57 +113,71 @@ static void my_platform_on_device_connected(uni_hid_device_t* d) {
 
 static void my_platform_on_device_disconnected(uni_hid_device_t* d) {
     logi("custom: device disconnected: %p\n", d);
+
+    int slot = findSlotForDevice(d);
+    if (slot >= 0) {
+        logi("Freeing slot %d\n", slot);
+        deviceForSlot[slot] = nullptr;
+        controllers[slot].reset();   // optional, falls du eine Reset-Funktion hast
+    }
+
 }
 
 static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
     logi("custom: device ready: %p\n", d);
-    my_platform_instance_t* ins = get_my_platform_instance(d);
-    ins->gamepad_seat = GAMEPAD_SEAT_A;
+    // my_platform_instance_t* ins = get_my_platform_instance(d);
+    // ins->gamepad_seat = GAMEPAD_SEAT_A;
+
+    int slot = findFreeSlot();
+    if (slot < 0) {
+        loge("No free controller slots!\n");
+        return UNI_ERROR_SUCCESS;
+    }
+
+    deviceForSlot[slot] = d;
+
+    // Controller initialisieren
+    controllers[slot].setDevice(d); 
+    controllers[slot].startGyroCalibration();
+
+    logi("Assigned controller to slot %d\n", slot);
 
     trigger_event_on_gamepad(d);
-
-    // Bei Start KALIBRIERUNG STARTEN
-    controller.startGyroCalibration();
     return UNI_ERROR_SUCCESS;
+
 }
 
 static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
-    // static uint8_t leds = 0;
-    // static uint8_t enabled = true;
-    // // static uni_controller_t prev = {0};
-    // static uni_controller_t prev = {};
-    // uni_gamepad_t* gp;
-
-    // // Optimization to avoid processing the previous data so that the console
-    // // does not get spammed with a lot of logs, but remove it from your project.
-    // if (memcmp(&prev, ctl, sizeof(*ctl)) == 0) {
-    //     return;
-    // }
-    // prev = *ctl;
-    // // Print device Id before dumping gamepad.
-    // // This could be very CPU intensive and might crash the ESP32.
-    // // Remove these 2 lines in production code.
+    int slot;
     // // logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
     // // uni_controller_dump(ctl);
 
     switch (ctl->klass) {
         case UNI_CONTROLLER_CLASS_GAMEPAD:
+            slot = findSlotForDevice(d);
+            if (slot < 0)
+                return;
 
-            controller.update(ctl->gamepad, d, ctl->battery);
+                // Einmalige Initialisierung
+            if (!controllers[slot].hasGpActive()) {
+                controllers[slot].setGamepad(&ctl->gamepad, d, ctl->battery);
+            }
+
+            controllers[slot].update(ctl->gamepad, d, ctl->battery);
 
 
+        break;
             // // Toggle Bluetooth connections
-            // if ((gp->buttons & BUTTON_SHOULDER_L) && enabled) {
             //     logi("*** Stop scanning\n");
             //     uni_bt_stop_scanning_safe();
-            //     enabled = false;
-            // }
-            // if ((gp->buttons & BUTTON_SHOULDER_R) && !enabled) {
             //     logi("*** Start scanning\n");
             //     uni_bt_start_scanning_and_autoconnect_safe();
-            //     enabled = true;
-            // }
-    
+
+        case UNI_CONTROLLER_CLASS_NONE:
+        case UNI_CONTROLLER_CLASS_MOUSE:
+        case UNI_CONTROLLER_CLASS_KEYBOARD:
+        case UNI_CONTROLLER_CLASS_BALANCE_BOARD:
+        case UNI_CONTROLLER_CLASS_COUNT:
             break;
         default:
             break;
@@ -258,9 +279,14 @@ void myMainTask(void* p) {
         if (now - last > 10000) {
             last = now;
             //logi("Main loop 10 ms\n");
-            controller.process();          // Press/Release, Sticks, etc.
+            for (int i = 0; i < 4; i++) {
+                controllers[i].process();          // Press/Release, Sticks, Gyro, Accel
+            }
         }
-        controller.updateBatteryLED(now); // Batterie-LED-Logik
+        // Batterie-LED-Logik für alle Controller
+        for (int i = 0; i < 4; i++) {
+            controllers[i].updateBatteryLED(now);
+        }
 
 
         // CPU freigeben (wichtig!)
@@ -281,3 +307,18 @@ static void initPins() {
     gpio_set_level(LED_PIN, 0);   // LED aus
 }
 
+static int findFreeSlot() {
+    for (int i = 0; i < 4; i++) {
+        if (deviceForSlot[i] == nullptr)
+            return i;
+    }
+    return -1;
+}
+
+static int findSlotForDevice(uni_hid_device_t* d) {
+    for (int i = 0; i < 4; i++) {
+        if (deviceForSlot[i] == d)
+            return i;
+    }
+    return -1;
+}

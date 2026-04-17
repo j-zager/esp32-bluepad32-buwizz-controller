@@ -10,6 +10,52 @@ static const char* TAG = "MyControllerConfig";
 
 MyControllerConfig::MyControllerConfig() {}
 
+void MyControllerConfig::setGamepad(const uni_gamepad_t* gp, uni_hid_device_t* dev, int bat) {
+    gamepad = *gp;      // initialer Zustand
+    hasGamepad = true;
+    device = dev;       // optional, aber sauber
+    battery = bat;      // optional, aber sauber
+}
+
+
+void MyControllerConfig::setDevice(uni_hid_device_t* dev) {
+    device = dev;
+}
+
+void MyControllerConfig::reset() {
+    hasGamepad = false;
+
+    device = nullptr;
+    battery = -1;
+
+    memset(&gamepad, 0, sizeof(gamepad));
+
+    // vorherige Werte für Sticks/Trigger
+    prevLX = prevLY = prevRX = prevRY = 0.0f;
+    prevL2 = prevR2 = 0.0f;
+
+    // Gyro
+    gyroCalibrated = false;
+    gyroCalibrating = false;
+    gyroBiasX = gyroBiasY = gyroBiasZ = 0;
+    filteredGX = filteredGY = filteredGZ = 0;
+
+    // Accel
+    filteredAX = filteredAY = filteredAZ = 0;
+
+    // Buttons
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        buttonStates[i] = false;
+        buttonTimes[i] = 0;
+        lastPressTime[i] = 0;
+    }
+}
+
+bool MyControllerConfig::hasGpActive() const {
+    return hasGamepad;
+}
+
+
 void MyControllerConfig::update(const uni_gamepad_t& gp, uni_hid_device_t* dev, int bat) {
     MyControllerEx::update(gp);
     device = dev;
@@ -121,18 +167,18 @@ void MyControllerConfig::onTrigger(const char* name, float value, bool pressed) 
 }
 
 void MyControllerConfig::onGyro(float gx, float gy, float gz) {
-    ESP_LOGI(TAG, "[GYRO] gx=%.2f gy=%.2f gz=%.2f", gx, gy, gz);
+    //ESP_LOGI(TAG, "[GYRO] gx=%.2f gy=%.2f gz=%.2f", gx, gy, gz);
 }
 
 void MyControllerConfig::onAccel(float ax, float ay, float az) {
-    ESP_LOGI(TAG, "[ACCEL] ax=%.2f ay=%.2f az=%.2f", ax, ay, az);
+    //ESP_LOGI(TAG, "[ACCEL] ax=%.2f ay=%.2f az=%.2f", ax, ay, az);
 }
 
 void MyControllerConfig::onLongPress(const char* name, float duration) {
     ESP_LOGI(TAG, "[LONG] %s (%.2fs)", name, duration);
     rumble(0, 255, 150);
-    if (strcmp(name, "ps") == 0 && duration > 4.0f) {
-        ESP_LOGI(TAG,"PS long press → restarting gyro calibration\n");
+    if (strcmp(name, "options") == 0 && duration > 4.0f) {
+        ESP_LOGI(TAG,"options long press → restarting gyro calibration\n");
         startGyroCalibration();   
     }
 }

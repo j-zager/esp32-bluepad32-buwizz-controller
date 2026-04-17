@@ -11,6 +11,11 @@ class MyControllerConfig : public MyControllerEx {
 public:
     MyControllerConfig();
 
+    void setGamepad(const uni_gamepad_t* gp, uni_hid_device_t* dev, int bat);
+    void setDevice(uni_hid_device_t* dev);
+    void reset();
+    bool hasGpActive() const;
+
     void update(const uni_gamepad_t& gp, uni_hid_device_t* dev, int battery);
 
     void onPress(const char* name) override;
