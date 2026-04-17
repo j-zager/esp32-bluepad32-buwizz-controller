@@ -4,6 +4,8 @@ extern "C" {
 #include "esp_timer.h"
 #include "esp_log.h"
 }
+#include <cmath>
+
 
 static const char* TAG = "MyControllerEx";
 
@@ -37,6 +39,20 @@ MyControllerEx::MyControllerEx() {
         buttonTimes[i] = 0;
         lastPressTime[i] = 0;
     }
+
+    prevLX = 0.0f;
+    prevLY = 0.0f;
+    prevRX = 0.0f;
+    prevRY = 0.0f;
+    prevL2 = 0.0f;
+    prevR2 = 0.0f;
+
+    prevGX = prevGY = prevGZ = 0;
+    prevAX = prevAY = prevAZ = 0;
+
+    filteredGX = filteredGY = filteredGZ = 0;
+    filteredAX = filteredAY = filteredAZ = 0;
+
 }
 
 void MyControllerEx::update(const uni_gamepad_t& gp) {
@@ -97,6 +113,135 @@ void MyControllerEx::getAccel(float& ax, float& ay, float& az) {
     ay = gamepad.accel[1];
     az = gamepad.accel[2];
 }
+
+void MyControllerEx::processGyro(uint64_t now) {
+    float gx_raw, gy_raw, gz_raw;
+    getGyro(gx_raw, gy_raw, gz_raw);
+
+    // 1. Skalieren (PS4: 16.4 LSB = 1 °/s)
+    float gx = gx_raw / 16.4f;
+    float gy = gy_raw / 16.4f;
+    float gz = gz_raw / 16.4f;
+
+    // 2. Kalibrierung läuft?
+    if (gyroCalibrating) {
+        updateGyroCalibration(gx, gy, gz);
+        return; // während Kalibrierung keine Events
+    }
+
+    // 3. Noch nicht kalibriert → ignorieren
+    if (!gyroCalibrated)
+        return;
+
+    // 4. Bias abziehen
+    gx -= gyroBiasX;
+    gy -= gyroBiasY;
+    gz -= gyroBiasZ;
+
+    // 5. Deadzone
+    if (fabs(gx) < 1) gx = 0;
+    if (fabs(gy) < 1) gy = 0;
+    if (fabs(gz) < 1) gz = 0;
+
+    // 6. Low‑Pass
+    filteredGX = filteredGX * 0.9f + gx * 0.1f;
+    filteredGY = filteredGY * 0.9f + gy * 0.1f;
+    filteredGZ = filteredGZ * 0.9f + gz * 0.1f;
+
+    // 7. Threshold
+    if (fabs(filteredGX - prevGX) < 0.5f &&
+        fabs(filteredGY - prevGY) < 0.5f &&
+        fabs(filteredGZ - prevGZ) < 0.5f)
+        return;
+
+    // 8. Rate‑Limit
+    static uint64_t lastEvent = 0;
+    if (now - lastEvent < 20000)
+        return;
+
+    lastEvent = now;
+
+    // 9. Event
+    onGyro(filteredGX, filteredGY, filteredGZ);
+
+    prevGX = filteredGX;
+    prevGY = filteredGY;
+    prevGZ = filteredGZ;
+}
+
+
+void MyControllerEx::processAccel(uint64_t now) {
+    float ax_raw, ay_raw, az_raw;
+    getAccel(ax_raw, ay_raw, az_raw);
+
+    // 1. Skalieren (PS4: 8192 LSB = 1g)
+    float ax = ax_raw / 8192.0f;
+    float ay = ay_raw / 8192.0f;
+    float az = az_raw / 8192.0f;
+
+    // 2. Deadzone (kleine Bewegungen ignorieren)
+    if (fabs(ax) < 0.02f) ax = 0;
+    if (fabs(ay) < 0.02f) ay = 0;
+    if (fabs(az - 1.0f) < 0.02f) az = 1.0f;   // Ruheposition (1g nach unten)
+
+    // 3. Low‑Pass‑Filter (Glättung)
+    filteredAX = filteredAX * 0.9f + ax * 0.1f;
+    filteredAY = filteredAY * 0.9f + ay * 0.1f;
+    filteredAZ = filteredAZ * 0.9f + az * 0.1f;
+
+    // 4. Threshold (nur echte Änderungen melden)
+    if (fabs(filteredAX - prevAX) < 0.01f &&
+        fabs(filteredAY - prevAY) < 0.01f &&
+        fabs(filteredAZ - prevAZ) < 0.01f)
+        return;
+
+    // 5. Rate‑Limit (max. 50 Events/s)
+    static uint64_t lastEvent = 0;
+    if (now - lastEvent < 20000)   // 20 ms
+        return;
+
+    lastEvent = now;
+
+    // 6. Event auslösen
+    onAccel(filteredAX, filteredAY, filteredAZ);
+
+    // 7. prev‑Werte aktualisieren
+    prevAX = filteredAX;
+    prevAY = filteredAY;
+    prevAZ = filteredAZ;
+}
+
+void MyControllerEx::startGyroCalibration() {
+    gyroCalibrating = true;
+    gyroCalibrated = false;
+
+    gyroCalibCount = 0;
+    gyroSumX = gyroSumY = gyroSumZ = 0;
+}
+
+bool MyControllerEx::updateGyroCalibration(float gx, float gy, float gz) {
+    if (!gyroCalibrating)
+        return false;
+
+    gyroSumX += gx;
+    gyroSumY += gy;
+    gyroSumZ += gz;
+    gyroCalibCount++;
+
+    if (gyroCalibCount >= GYRO_CALIB_SAMPLES) {
+        gyroBiasX = gyroSumX / gyroCalibCount;
+        gyroBiasY = gyroSumY / gyroCalibCount;
+        gyroBiasZ = gyroSumZ / gyroCalibCount;
+
+        gyroCalibrating = false;
+        gyroCalibrated = true;
+        return true;
+    }
+
+    return false;
+}
+
+
 
 bool MyControllerEx::isPressed(int id) {
     if (!hasGamepad) return false;
@@ -185,6 +330,9 @@ void MyControllerEx::process() {
     if (!hasGamepad)
         return;
 
+    // Zeitstempel EINMAL berechnen
+    uint64_t now = esp_timer_get_time();
+
     // --- Buttons ---
     for (int i = 0; i < BUTTON_COUNT; i++) {
         bool pressed = isPressed(buttonMap[i].id);
@@ -225,26 +373,8 @@ void MyControllerEx::process() {
         prevR2 = nR2;
     }
 
-        // --- Gyro ---
-    float gx, gy, gz;
-    getGyro(gx, gy, gz);
-    if (gx != prevGX || gy != prevGY || gz != prevGZ) {
-        onGyro(gx, gy, gz);
-        prevGX = gx;
-        prevGY = gy;
-        prevGZ = gz;
-    }
-
-    // --- Accel ---
-    float ax, ay, az;
-    getAccel(ax, ay, az);
-    if (ax != prevAX || ay != prevAY || az != prevAZ) {
-        onAccel(ax, ay, az);
-        prevAX = ax;
-        prevAY = ay;
-        prevAZ = az;
-    }
-
+    processGyro(now);
+    processAccel(now);
 
 }
 

@@ -114,6 +114,9 @@ static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
     ins->gamepad_seat = GAMEPAD_SEAT_A;
 
     trigger_event_on_gamepad(d);
+
+    // Bei Start KALIBRIERUNG STARTEN
+    controller.startGyroCalibration();
     return UNI_ERROR_SUCCESS;
 }
 

@@ -46,6 +46,12 @@ public:
     virtual void onLongPress(const char* name, float duration);
     virtual void onDoublePress(const char* name);
 
+    void processGyro(uint64_t now);
+    void processAccel(uint64_t now);
+
+    void startGyroCalibration();
+    bool updateGyroCalibration(float gx, float gy, float gz);
+
 
     // Debug-Ausgabe
     void printSticks();
@@ -71,6 +77,24 @@ protected:
 
     float prevGX = 0, prevGY = 0, prevGZ = 0;
     float prevAX = 0, prevAY = 0, prevAZ = 0;
+
+    float filteredGX = 0, filteredGY = 0, filteredGZ = 0;
+    float filteredAX = 0, filteredAY = 0, filteredAZ = 0;
+
+    bool gyroCalibrated = false;
+    bool gyroCalibrating = false;
+
+    static constexpr int GYRO_CALIB_SAMPLES = 500;
+    int gyroCalibCount = 0;
+
+    float gyroBiasX = 0;
+    float gyroBiasY = 0;
+    float gyroBiasZ = 0;
+
+    float gyroSumX = 0;
+    float gyroSumY = 0;
+    float gyroSumZ = 0;
+
 
 
     struct ButtonMapEntry {

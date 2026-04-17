@@ -131,6 +131,10 @@ void MyControllerConfig::onAccel(float ax, float ay, float az) {
 void MyControllerConfig::onLongPress(const char* name, float duration) {
     ESP_LOGI(TAG, "[LONG] %s (%.2fs)", name, duration);
     rumble(0, 255, 150);
+    if (strcmp(name, "ps") == 0 && duration > 4.0f) {
+        ESP_LOGI(TAG,"PS long press → restarting gyro calibration\n");
+        startGyroCalibration();   
+    }
 }
 
 void MyControllerConfig::onDoublePress(const char* name) {
