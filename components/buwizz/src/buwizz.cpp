@@ -26,6 +26,9 @@ BuWizz::BuWizz() : _con_handle(HCI_CON_HANDLE_INVALID), _connected(false), _moto
 
 void BuWizz::init() {
     gatt_client_init();
+    // NEU: Dem Stack sagen, dass wir Pairing unterstützen (No Input No Output)
+    sm_set_io_capabilities(IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
+    sm_set_authentication_requirements(SM_AUTHREQ_BONDING);
 
         // Das Objekt mit dem Handler verknüpfen
     _hci_event_callback_registration.callback = &BuWizz::packetHandler;
@@ -37,126 +40,260 @@ void BuWizz::init() {
 void BuWizz::connect() {
     if (_connected) return;
     printf("BuWizz: Verbindungsversuch...\n");
-    gap_connect(_addr, (bd_addr_type_t)0); 
+    //gap_connect(_addr, (bd_addr_type_t)0);  
+    uni_bt_le_scan_start();
 }
-
 
 void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
     if (packet_type != HCI_EVENT_PACKET) return;
 
-    uint8_t event = hci_event_packet_get_type(packet);
-    
-    // 1. Verbindungsebene (GAP)
-    if (event == HCI_EVENT_LE_META) {
-        if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
-            buwizz._con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
-            buwizz._connected = true;
-            printf("BuWizz: ✔ Verbunden! Starte Service-Suche...\n");
+    // TEST-PRINT: Wenn das nicht erscheint, lässt Bluepad32 dich nicht durch!
+    if (packet_type == HCI_EVENT_PACKET) {
+          printf("DEBUG: HCI Event %02x empfangen\n", hci_event_packet_get_type(packet));
+    }
 
-            // JETZT: Discovery starten! Wir suchen den Haupt-Service
+    uint8_t event = hci_event_packet_get_type(packet);
+
+    switch (event) {
+        // --- GAP EBENE: VERBINDUNG ---
+        // case HCI_EVENT_LE_META:{
+        //     // if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
+        //     //     buwizz._con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
+        //     //     buwizz._connected = true;
+        //     //     printf("BuWizz: ✔ Verbunden! Handle: 0x%04x. Verhandle MTU...\n", buwizz._con_handle);
+                
+        //     //     // Schritt 1: MTU anfordern (Triggert GATT_EVENT_MTU)
+        //     //     gatt_client_send_mtu_negotiation(&BuWizz::packetHandler,buwizz._con_handle);
+        //     // }
+        //     uint8_t subevent = hci_event_le_meta_get_subevent_code(packet);
+    
+        //     // Wir fangen BEIDE möglichen Connection-Events ab (Standard 0x01 und Enhanced 0x0a)
+        //     if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE || 
+        //         subevent == 0x0a) { // 0x0a = Enhanced Connection Complete
+                
+        //         // Handle an unterschiedlichen Positionen: 
+        //         // Standard (0x01) -> Byte 4
+        //         // Enhanced (0x0a) -> Byte 4
+        //         uint16_t handle = little_endian_read_16(packet, 4); 
+                
+        //         if (handle != 0) {
+        //             buwizz._con_handle = handle;
+        //             buwizz._connected = true;
+        //             printf("BuWizz: ✔ ECHTES HANDLE GEFUNDEN: 0x%04x\n", buwizz._con_handle);
+        //             gatt_client_send_mtu_negotiation(&BuWizz::packetHandler, buwizz._con_handle);
+        //         }
+        //     }
+        // }break;
+        case HCI_EVENT_LE_META: {
+            uint8_t subevent = hci_event_le_meta_get_subevent_code(packet);
+            
+            // A) Falls wir ein Gerät im Scan finden (0x02 = Advertising Report)
+            if (subevent == HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
+                // Adresse auslesen: Im LE Meta Event Typ 0x02 liegt die Adresse ab Byte 6
+                // Byte 5 ist der Adress-Typ (00 = Public, 01 = Random)
+                uint8_t addr_type = packet[5];
+
+                // Wir lesen die Adresse ab Byte 5
+                printf("Scan-Paket gefunden! Adresse: %02x:%02x:%02x:%02x:%02x:%02x\n", 
+                        packet[6], packet[7], packet[8], packet[9], packet[10], packet[11]);
+                
+                // Test: Vergleiche nur die ersten 3 Bytes deiner BuWizz-MAC (50:FA:AB)
+                if (packet[6] == 0x4C && packet[7] == 0x03 && packet[8] == 0x6D) { // Probier es mal "rückwärts"
+                    printf("BuWizz: Treffer (Rückwärts-Check)!\n");
+                    printf("BuWizz: GEFUNDEN! Verbinde mit Typ %d...\n", addr_type);
+        
+                    uni_bt_le_scan_stop();
+                    
+                    // WICHTIG: Wir nutzen den gefundenen addr_type (0 oder 1)
+                    bd_addr_t found_addr;
+                    //memcpy(found_addr, &packet[6], 6);
+
+                    // Wir drehen die 6 Bytes beim Kopieren von Little Endian zu Big Endian
+                    for (int i = 0; i < 6; i++) {
+                        found_addr[i] = packet[11 - i]; 
+                    }
+
+                    printf("Sende Connect an: %02x:%02x:%02x:%02x:%02x:%02x\n", 
+                            found_addr[0], found_addr[1], found_addr[2], 
+                            found_addr[3], found_addr[4], found_addr[5]);
+                    gap_connect(found_addr, (bd_addr_type_t)addr_type);
+                }
+            }
+            
+            // B) Falls die Verbindung bereits hergestellt wurde (0x01 oder 0x0a)
+            else if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE || subevent == 0x0a) {
+
+                uint8_t status = packet[3]; 
+                if (status == 0) {
+                    // Wir lesen das Handle von Position 14 (aus deinem Dump: 18 00)
+                    uint16_t handle = little_endian_read_16(packet, 14);
+                    
+                    // Falls 14 auch 0 ist, probieren wir zur Sicherheit 4
+                    // if (handle == 0) handle = little_endian_read_16(packet, 4);
+
+                    if (handle != 0) {
+                        buwizz._con_handle = handle;
+                        buwizz._connected = true;
+                        printf("BuWizz: ✔ ECHTES HANDLE GEFUNDEN: 0x%04x\n", buwizz._con_handle);
+                        
+                        // Jetzt die Service-Suche starten
+                        gatt_client_discover_primary_services_by_uuid128(
+                            &BuWizz::packetHandler, buwizz._con_handle, BUWIZZ_SERVICE_UUID128);
+                    }
+                }
+            //     // HEX-DUMP des Pakets zur Analyse
+            //     printf("BuWizz Paket-Dump: ");
+            //     for(int i=0; i<size; i++) printf("%02x ", packet[i]);
+            //     printf("\n");
+
+            //     uint16_t h4 = little_endian_read_16(packet, 4);
+            //     uint16_t h6 = little_endian_read_16(packet, 6);
+            //     printf("Check Pos 4: 0x%04x, Pos 6: 0x%04x\n", h4, h6);
+
+            //     // Wir nehmen das erste, das nicht 0 ist
+            //     uint16_t final_handle = (h4 != 0) ? h4 : h6;
+
+            //     if (final_handle != 0) {
+            //         buwizz._con_handle = final_handle;
+            //         buwizz._connected = true;
+            //         printf("BuWizz: ✔ ECHTES HANDLE GEFUNDEN: 0x%04x\n", buwizz._con_handle);
+            //         gatt_client_discover_primary_services_by_uuid128(
+            //             &BuWizz::packetHandler, buwizz._con_handle, BUWIZZ_SERVICE_UUID128);
+            //     }
+             }
+    
+        } break;
+
+
+        // --- GATT EBENE: MTU FERTIG ---
+        case GATT_EVENT_MTU:
+            printf("BuWizz: MTU verhandelt auf %d. Suche Service...\n", gatt_event_mtu_get_MTU(packet));
+            // Schritt 2: Service suchen
             gatt_client_discover_primary_services_by_uuid128(
                 &BuWizz::packetHandler, buwizz._con_handle, BUWIZZ_SERVICE_UUID128);
-        }
-    } 
-    
-    // 2. GATT-Ebene (Hier kommen die Antworten auf Discovery)
-    else if (event == GATT_EVENT_QUERY_COMPLETE) {
-        printf("BuWizz: Discovery Schritt abgeschlossen.\n");
+            break;
+
+        // --- GATT EBENE: SERVICE GEFUNDEN ---
+        case GATT_EVENT_SERVICE_QUERY_RESULT: {
+            gatt_client_service_t service;
+            gatt_event_service_query_result_get_service(packet, &service);
+            printf("BuWizz: Service gefunden! Bereich: 0x%04x-0x%04x. Suche ALLE Chars...\n", 
+                    service.start_group_handle, service.end_group_handle);
+            
+            // Schritt 3: ALLE Characteristics in diesem Service auflisten
+            gatt_client_discover_characteristics_for_service(
+                &BuWizz::packetHandler, buwizz._con_handle, &service);
+        } break;
+
+        // --- GATT EBENE: CHARACTERISTIC GEFUNDEN ---
+        case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT: {
+            gatt_client_characteristic_t characteristic;
+            gatt_event_characteristic_query_result_get_characteristic(packet, &characteristic);
+            
+            // Wir loggen jedes Handle und die UUID (für den Vergleich mit 92d1...)
+            printf("BuWizz: Char gefunden! Handle: 0x%04x, UUID: ", characteristic.value_handle);
+            for (int i = 0; i < 16; i++) printf("%02x", characteristic.uuid128[i]);
+            printf("\n");
+
+            // Automatischer Check auf die Motor-UUID (92d1)
+            // Je nach Endianness liegt 92 d1 an Index 2/3 oder 12/13
+            if ((characteristic.uuid128[2] == 0x92 && characteristic.uuid128[3] == 0xd1) ||
+                (characteristic.uuid128[12] == 0x92 && characteristic.uuid128[13] == 0xd1)) {
+                buwizz._motor_handle = characteristic.value_handle;
+                printf("BuWizz: ⭐ MOTOR-HANDLE IDENTIFIZIERT: 0x%04x\n", buwizz._motor_handle);
+            }
+        } break;
+
+        // --- GATT EBENE: SCHRITT ABGESCHLOSSEN ---
+        case GATT_EVENT_QUERY_COMPLETE:
+            printf("BuWizz: Discovery Schritt abgeschlossen.\n");
+            // Falls wir das Handle haben, setzen wir den Modus
+            if (buwizz._motor_handle != 0) {
+                buwizz.setMode(2); // FAST
+            }
+            break;
+
+        // case HCI_EVENT_DISCONNECTION_COMPLETE:
+        //     buwizz._connected = false;
+        //     buwizz._con_handle = HCI_CON_HANDLE_INVALID;
+        //     buwizz._motor_handle = 0;
+        //     printf("BuWizz: ❌ Verbindung getrennt.\n");
+        //     break;
+        case HCI_EVENT_DISCONNECTION_COMPLETE: {
+            uint8_t reason = packet[5];
+            printf("BuWizz: Verbindung verloren! Grund-Code: 0x%02x\n", reason);
+            // Grund 0x13: Remote User Terminated (BuWizz hat dich rausgeworfen)
+            // Grund 0x22: LMP Response Timeout (Funkstörung/Protokollfehler)
+            buwizz._connected = false;
+            } break;
+
+        default:
+            break;
     }
+}
+// void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
+//     if (packet_type != HCI_EVENT_PACKET) return;
+
+//     uint8_t event = hci_event_packet_get_type(packet);
     
-    // else if (event == GATT_EVENT_SERVICE_QUERY_RESULT) {
-    //     // Service gefunden! Jetzt suchen wir die Characteristic dadrin
-    //     gatt_client_service_t service;
-    //     gatt_event_service_query_result_get_service(packet, &service);
-    //     printf("BuWizz: Service gefunden! Suche Characteristic...\n");
-        
-    //     gatt_client_discover_characteristics_for_service_by_uuid128(
-    //         &BuWizz::packetHandler, buwizz._con_handle, &service, BUWIZZ_CHAR_UUID128);
-    // }
+//     // 1. Verbindungsebene (GAP)
+//     if (event == HCI_EVENT_LE_META) {
+//         if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
+//             buwizz._con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
+//             buwizz._connected = true;
+//             printf("BuWizz: ✔ Verbunden! Starte Service-Suche...\n");
 
-    // else if (event == GATT_EVENT_CHARACTERISTIC_QUERY_RESULT) {
-    //     // Characteristic gefunden! Handle speichern
-    //     gatt_client_characteristic_t characteristic;
-    //     gatt_event_characteristic_query_result_get_characteristic(packet, &characteristic);
-    //     buwizz._motor_handle = characteristic.value_handle;
-    //     printf("BuWizz: ✔ Motor-Handle gefunden: %04x. Bereit!\n", buwizz._motor_handle);
+//             // JETZT: Discovery starten! Wir suchen den Haupt-Service
+//             gatt_client_discover_primary_services_by_uuid128(
+//                 &BuWizz::packetHandler, buwizz._con_handle, BUWIZZ_SERVICE_UUID128);
+//         }
+//     } 
+    
+//     // 2. GATT-Ebene (Hier kommen die Antworten auf Discovery)
+//     else if (event == GATT_EVENT_QUERY_COMPLETE) {
+//         printf("BuWizz: Discovery Schritt abgeschlossen.\n");
+//     }
+    
+//     else if (event == GATT_EVENT_SERVICE_QUERY_RESULT) {
+//         gatt_client_service_t service;
+//         gatt_event_service_query_result_get_service(packet, &service);
+//         printf("BuWizz: Service gefunden! Suche Characteristic...\n");
         
-    //     // OPTIONAL: Hier jetzt sofort den Ludicrous-Mode (4) senden
-    //     buwizz.setMode(2);// fast
-    // }
-    // else if (event == GATT_EVENT_SERVICE_QUERY_RESULT) {
-    //     gatt_client_service_t service;
-    //     gatt_event_service_query_result_get_service(packet, &service);
-    //     printf("BuWizz: Service gefunden! Suche JETZT ALLE Characteristics...\n");
-        
-    //     // Wir suchen NICHT nach einer UUID, sondern lassen uns ALLE zeigen:
-    //     gatt_client_discover_characteristics_for_service(
-    //         &BuWizz::packetHandler, buwizz._con_handle, &service);
-    // }
-    // else if (event == GATT_EVENT_CHARACTERISTIC_QUERY_RESULT) {
-    //     gatt_client_characteristic_t characteristic;
-    //     gatt_event_characteristic_query_result_get_characteristic(packet, &characteristic);
-        
-    //     // Wir prüfen, ob es eine 16-Bit oder 128-Bit UUID ist
-    //     if (characteristic.uuid16 != 0) {
-    //         printf("BuWizz: Char gefunden! Handle: 0x%04x, UUID16: 0x%04x\n", 
-    //                 characteristic.value_handle, characteristic.uuid16);
-    //     } else {
-    //         // Wir geben die 128-Bit UUID in lesbarer Form aus (Big Endian für das Log)
-    //         printf("BuWizz: Char gefunden! Handle: 0x%04x, UUID128: ", characteristic.value_handle);
-    //         for (int i = 0; i < 16; i++) {
-    //             printf("%02x", characteristic.uuid128[i]);
-    //         }
-    //         printf("\n");
-    //     }
+//         // // Suche gezielt nach der 92d1... UUID in diesem Service
+//         // gatt_client_discover_characteristics_for_service_by_uuid128(
+//         //     &BuWizz::packetHandler, buwizz._con_handle, &service, BUWIZZ_CHAR_UUID128);
 
-    //     // Wenn die UUID mit "000092d1" beginnt (oder endet, je nach Byte-Order), 
-    //     // haben wir unser Motor-Handle!
-    //     if (characteristic.uuid128[12] == 0x92 && characteristic.uuid128[13] == 0xd1) {
-    //         buwizz._motor_handle = characteristic.value_handle;
-    //         printf("BuWizz: ✔ MOTOR-HANDLE IDENTIFIZIERT: 0x%04x\n", buwizz._motor_handle);
-    //     }
-    // }
-    else if (event == GATT_EVENT_SERVICE_QUERY_RESULT) {
-        gatt_client_service_t service;
-        gatt_event_service_query_result_get_service(packet, &service);
-        printf("BuWizz: Service gefunden! Suche Characteristic...\n");
-        
-        // // Suche gezielt nach der 92d1... UUID in diesem Service
-        // gatt_client_discover_characteristics_for_service_by_uuid128(
-        //     &BuWizz::packetHandler, buwizz._con_handle, &service, BUWIZZ_CHAR_UUID128);
-
-        // Wir suchen NICHT nach der 92d1... UUID, sondern listen ALLES in diesem Service auf:
-        gatt_client_discover_characteristics_for_service(
-            &BuWizz::packetHandler, buwizz._con_handle, &service);
+//         // Wir suchen NICHT nach der 92d1... UUID, sondern listen ALLES in diesem Service auf:
+//         gatt_client_discover_characteristics_for_service(
+//             &BuWizz::packetHandler, buwizz._con_handle, &service);
 
             
-    }
+//     }
 
-    else if (event == GATT_EVENT_CHARACTERISTIC_QUERY_RESULT) {
-        gatt_client_characteristic_t characteristic;
-        gatt_event_characteristic_query_result_get_characteristic(packet, &characteristic);
+//     else if (event == GATT_EVENT_CHARACTERISTIC_QUERY_RESULT) {
+//         gatt_client_characteristic_t characteristic;
+//         gatt_event_characteristic_query_result_get_characteristic(packet, &characteristic);
 
-        // Wir lassen uns das Handle und die UUID anzeigen, die der BuWizz schickt
-        printf("BuWizz: Char gefunden! Handle: 0x%04x, UUID128: ", characteristic.value_handle);
-        for (int i = 0; i < 16; i++) {
-            printf("%02x", characteristic.uuid128[i]);
-        }
-        printf("\n");
+//         // Wir lassen uns das Handle und die UUID anzeigen, die der BuWizz schickt
+//         printf("BuWizz: Char gefunden! Handle: 0x%04x, UUID128: ", characteristic.value_handle);
+//         for (int i = 0; i < 16; i++) {
+//             printf("%02x", characteristic.uuid128[i]);
+//         }
+//         printf("\n");
 
-        // Wir speichern das Handle einfach mal, um zu sehen ob wir es treffen
-        buwizz._motor_handle = characteristic.value_handle;
+//         // Wir speichern das Handle einfach mal, um zu sehen ob wir es treffen
+//         buwizz._motor_handle = characteristic.value_handle;
 
 
-        // buwizz._motor_handle = characteristic.value_handle;
-        // printf("BuWizz: ✔ Motor-Handle gefunden: 0x%04x\n", buwizz._motor_handle);
+//         // buwizz._motor_handle = characteristic.value_handle;
+//         // printf("BuWizz: ✔ Motor-Handle gefunden: 0x%04x\n", buwizz._motor_handle);
         
-        // // Sobald das Handle da ist: Modus setzen wie im NimBLE-Code (FAST = 2)
-        // buwizz.setMode(2); 
-    }
+//         // // Sobald das Handle da ist: Modus setzen wie im NimBLE-Code (FAST = 2)
+//         // buwizz.setMode(2); 
+//     }
 
 
-}
+// }
 
 // Hilfsfunktion für den Modus
 void BuWizz::setMode(uint8_t mode) {

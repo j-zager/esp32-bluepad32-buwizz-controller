@@ -230,6 +230,7 @@
 extern "C" {
     #include "btstack.h"
     #include "gatt_client.h"
+    #include "bt/uni_bt_le.h"
 }
 
 class BuWizz {
