@@ -5,15 +5,20 @@ extern "C" {
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 }
+
+
+#define LED_PIN GPIO_NUM_2
 
 #include <string.h>
 
 #include <uni.h>
 
 void myMainTask(void* p);
+static void initPins();
 
-static uni_gamepad_t last_gp = {};
+static uni_gamepad_t lastGp = {};
 
 
 // Custom "instance"
@@ -68,6 +73,10 @@ static void my_platform_on_init_complete(void) {
     else
         uni_bt_list_keys_unsafe();
 
+
+    // Pins initialisieren
+    initPins();
+    // Deine Task starten
     xTaskCreate(myMainTask, "my_task", 4096, NULL, 5, NULL);
 }
 
@@ -127,6 +136,7 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
     switch (ctl->klass) {
         case UNI_CONTROLLER_CLASS_GAMEPAD:
             gp = &ctl->gamepad;
+            lastGp = ctl->gamepad;
 
             // Debugging
             // Axis ry: control rumble
@@ -160,6 +170,14 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
             
             if (gp->dpad & DPAD_UP){
                 logi("DPAD_UP\n");
+            }
+            if (gp->dpad & DPAD_LEFT){
+                logi("DPAD_LEFT LED an\n");
+                gpio_set_level(LED_PIN, 1);   // LED an
+            }
+            if (gp->dpad & DPAD_RIGHT){
+                logi("DPAD_RIGHT LED aus\n");
+                gpio_set_level(LED_PIN, 0);   // LED aus
             }
             break;
         default:
@@ -278,7 +296,7 @@ void myMainTask(void* p) {
         uint64_t now = esp_timer_get_time();
 
         // alle 100 ms
-        if (now - last > 100000) {
+        if (now - last > 500000) {
             last = now;
             logi("Main loop 500 ms\n");
 
@@ -288,3 +306,17 @@ void myMainTask(void* p) {
         vTaskDelay(1);
     }
 }
+
+
+static void initPins() {
+    gpio_config_t io = {};
+    io.intr_type = GPIO_INTR_DISABLE;
+    io.mode = GPIO_MODE_OUTPUT;
+    io.pin_bit_mask = (1ULL << LED_PIN);
+    io.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io.pull_up_en = GPIO_PULLUP_DISABLE;
+    gpio_config(&io);
+
+    gpio_set_level(LED_PIN, 0);   // LED aus
+}
+
