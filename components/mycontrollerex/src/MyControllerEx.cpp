@@ -12,16 +12,25 @@ MyControllerEx::MyControllerEx() {
     buttonMap[1]  = {"circle",    1};
     buttonMap[2]  = {"square",    2};
     buttonMap[3]  = {"triangle",  3};
+
     buttonMap[4]  = {"l1",        4};
     buttonMap[5]  = {"r1",        5};
+
     buttonMap[6]  = {"l3",        6};
     buttonMap[7]  = {"r3",        7};
-    buttonMap[8]  = {"options",   8};
-    buttonMap[9]  = {"share",     9};
-    buttonMap[10] = {"up",        10};
-    buttonMap[11] = {"down",      11};
-    buttonMap[12] = {"left",      12};
-    buttonMap[13] = {"right",     13};
+
+    // --- MISC Buttons ---
+    buttonMap[8]  = {"options",   8};   // START
+    buttonMap[9]  = {"share",     9};   // SELECT
+    buttonMap[10] = {"ps",        10};  // SYSTEM
+    buttonMap[11] = {"touchpad",  11};  // CAPTURE
+
+    // --- D-Pad ---
+    buttonMap[12] = {"up",        12};
+    buttonMap[13] = {"down",      13};
+    buttonMap[14] = {"left",      14};
+    buttonMap[15] = {"right",     15};
+
 
     for (int i = 0; i < BUTTON_COUNT; i++) {
         buttonStates[i] = false;
@@ -78,23 +87,37 @@ bool MyControllerEx::isPressed(int id) {
     if (!hasGamepad) return false;
 
     switch (id) {
-        case 0:  return gamepad.buttons & BUTTON_A;
-        case 1:  return gamepad.buttons & BUTTON_B;
-        case 2:  return gamepad.buttons & BUTTON_X;
-        case 3:  return gamepad.buttons & BUTTON_Y;
-        case 4:  return gamepad.buttons & BUTTON_SHOULDER_L;
-        case 5:  return gamepad.buttons & BUTTON_SHOULDER_R;
-        case 6:  return gamepad.buttons & BUTTON_THUMB_L;
-        case 7:  return gamepad.buttons & BUTTON_THUMB_R;
-        case 8:  return gamepad.misc_buttons & MISC_BUTTON_START;
-        case 9:  return gamepad.misc_buttons & MISC_BUTTON_SELECT;
-        case 10: return gamepad.dpad == DPAD_UP;
-        case 11: return gamepad.dpad == DPAD_DOWN;
-        case 12: return gamepad.dpad == DPAD_LEFT;
-        case 13: return gamepad.dpad == DPAD_RIGHT;
+
+        // --- Face Buttons ---
+        case 0:  return gamepad.buttons & BUTTON_A;  // cross
+        case 1:  return gamepad.buttons & BUTTON_B;  // circle
+        case 2:  return gamepad.buttons & BUTTON_X;  // square
+        case 3:  return gamepad.buttons & BUTTON_Y;  // triangle
+
+        // --- Shoulder Buttons ---
+        case 4:  return gamepad.buttons & BUTTON_SHOULDER_L; // L1
+        case 5:  return gamepad.buttons & BUTTON_SHOULDER_R; // R1
+
+        // --- Stick Buttons ---
+        case 6:  return gamepad.buttons & BUTTON_THUMB_L; // L3
+        case 7:  return gamepad.buttons & BUTTON_THUMB_R; // R3
+
+        // --- Misc Buttons ---
+        case 8:  return gamepad.misc_buttons & MISC_BUTTON_START;   // options
+        case 9:  return gamepad.misc_buttons & MISC_BUTTON_SELECT;  // share
+        case 10: return gamepad.misc_buttons & MISC_BUTTON_SYSTEM;  // ps
+        case 11: return gamepad.misc_buttons & MISC_BUTTON_CAPTURE; // touchpad
+
+        // --- D-Pad ---
+        case 12: return gamepad.dpad == DPAD_UP;
+        case 13: return gamepad.dpad == DPAD_DOWN;
+        case 14: return gamepad.dpad == DPAD_LEFT;
+        case 15: return gamepad.dpad == DPAD_RIGHT;
     }
+
     return false;
 }
+
 
 void MyControllerEx::updateButton(int index, bool pressed) {
     bool prev = buttonStates[index];

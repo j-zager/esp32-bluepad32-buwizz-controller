@@ -9,7 +9,7 @@ extern "C" {
 
 class MyControllerEx {
 public:
-    static constexpr int BUTTON_COUNT = 14;
+    static constexpr int BUTTON_COUNT = 16;
     static constexpr float TRIGGER_THRESHOLD = 0.1f;
     static constexpr int DEADZONE_RADIUS = 80;
 

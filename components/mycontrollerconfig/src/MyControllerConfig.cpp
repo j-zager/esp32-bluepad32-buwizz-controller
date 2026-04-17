@@ -72,6 +72,7 @@ void MyControllerConfig::updateBatteryLED(uint64_t now) {
 void MyControllerConfig::onPress(const char* name) {
     ESP_LOGI(TAG, "[PRESS] %s", name);
 
+
     if (strcmp(name, "up") == 0)
         setColor(0, 255, 0);
 

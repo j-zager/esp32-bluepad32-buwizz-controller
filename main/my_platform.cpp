@@ -15,9 +15,6 @@ extern "C" {
 
 #include <uni.h>
 
-// #include "MyControllerEx.h"
-
-// static MyControllerEx controller;
 
 #include "MyControllerConfig.h"
 
@@ -26,9 +23,6 @@ static MyControllerConfig controller;
 
 void myMainTask(void* p);
 static void initPins();
-
-static uni_gamepad_t lastGp = {};
-
 
 // Custom "instance"
 typedef struct my_platform_instance_s {
@@ -144,29 +138,9 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
 
     switch (ctl->klass) {
         case UNI_CONTROLLER_CLASS_GAMEPAD:
-            // controller.update(ctl->gamepad);
+
             controller.update(ctl->gamepad, d, ctl->battery);
 
-            // gp = &ctl->gamepad;
-            // lastGp = ctl->gamepad;
-
-            // // Debugging
-            // // Axis ry: control rumble
-            // if ((gp->buttons & BUTTON_A) && d->report_parser.play_dual_rumble != NULL) {
-            //     d->report_parser.play_dual_rumble(d, 0 /* delayed start ms */, 250 /* duration ms */,
-            //                                       255 /* weak magnitude */, 0 /* strong magnitude */);
-            // }
-            // // Buttons: Control LEDs On/Off
-            // if ((gp->buttons & BUTTON_B) && d->report_parser.set_player_leds != NULL) {
-            //     d->report_parser.set_player_leds(d, leds++ & 0x0f);
-            // }
-            // // Axis: control RGB color
-            // if ((gp->buttons & BUTTON_X) && d->report_parser.set_lightbar_color != NULL) {
-            //     uint8_t r = (gp->axis_x * 256) / 512;
-            //     uint8_t g = (gp->axis_y * 256) / 512;
-            //     uint8_t b = (gp->axis_rx * 256) / 512;
-            //     d->report_parser.set_lightbar_color(d, r, g, b);
-            // }
 
             // // Toggle Bluetooth connections
             // if ((gp->buttons & BUTTON_SHOULDER_L) && enabled) {
@@ -179,18 +153,7 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
             //     uni_bt_start_scanning_and_autoconnect_safe();
             //     enabled = true;
             // }
-            
-            // if (gp->dpad & DPAD_UP){
-            //     logi("DPAD_UP\n");
-            // }
-            // if (gp->dpad & DPAD_LEFT){
-            //     logi("DPAD_LEFT LED an\n");
-            //     gpio_set_level(LED_PIN, 1);   // LED an
-            // }
-            // if (gp->dpad & DPAD_RIGHT){
-            //     logi("DPAD_RIGHT LED aus\n");
-            //     gpio_set_level(LED_PIN, 0);   // LED aus
-            // }
+    
             break;
         default:
             break;
@@ -259,25 +222,6 @@ static void trigger_event_on_gamepad(uni_hid_device_t* d) {
     }
 }
 
-//
-// Entry Point
-//
-// struct uni_platform* get_my_platform(void) {
-//     static struct uni_platform plat = {
-//         .name = "custom",
-//         .init = my_platform_init,
-//         .on_init_complete = my_platform_on_init_complete,
-//         .on_device_discovered = my_platform_on_device_discovered,
-//         .on_device_connected = my_platform_on_device_connected,
-//         .on_device_disconnected = my_platform_on_device_disconnected,
-//         .on_device_ready = my_platform_on_device_ready,
-//         .on_oob_event = my_platform_on_oob_event,
-//         .on_controller_data = my_platform_on_controller_data,
-//         .get_property = my_platform_get_property,
-//     };
-
-//     return &plat;
-// }
 
 extern "C" struct uni_platform* get_my_platform(void) {
     static struct uni_platform plat = {
