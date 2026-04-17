@@ -255,6 +255,9 @@ private:
     bd_addr_t _addr = {0x50, 0xFA, 0xAB, 0x6D, 0x03, 0x4C};
     bool _connected;
     uint16_t _motor_handle; 
+
+    gatt_client_service_t buwizz_service;
+    bool service_found;
 };
 
 // Das macht das Objekt für alle Dateien (platform.cpp, main.cpp etc.) sichtbar
