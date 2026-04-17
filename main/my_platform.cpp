@@ -15,6 +15,10 @@ extern "C" {
 
 #include <uni.h>
 
+#include "MyControllerEx.h"
+
+static MyControllerEx controller;
+
 void myMainTask(void* p);
 static void initPins();
 
@@ -115,70 +119,71 @@ static uni_error_t my_platform_on_device_ready(uni_hid_device_t* d) {
 }
 
 static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t* ctl) {
-    static uint8_t leds = 0;
-    static uint8_t enabled = true;
-    // static uni_controller_t prev = {0};
-    static uni_controller_t prev = {};
-    uni_gamepad_t* gp;
+    // static uint8_t leds = 0;
+    // static uint8_t enabled = true;
+    // // static uni_controller_t prev = {0};
+    // static uni_controller_t prev = {};
+    // uni_gamepad_t* gp;
 
-    // Optimization to avoid processing the previous data so that the console
-    // does not get spammed with a lot of logs, but remove it from your project.
-    if (memcmp(&prev, ctl, sizeof(*ctl)) == 0) {
-        return;
-    }
-    prev = *ctl;
-    // Print device Id before dumping gamepad.
-    // This could be very CPU intensive and might crash the ESP32.
-    // Remove these 2 lines in production code.
-    // logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
-    // uni_controller_dump(ctl);
+    // // Optimization to avoid processing the previous data so that the console
+    // // does not get spammed with a lot of logs, but remove it from your project.
+    // if (memcmp(&prev, ctl, sizeof(*ctl)) == 0) {
+    //     return;
+    // }
+    // prev = *ctl;
+    // // Print device Id before dumping gamepad.
+    // // This could be very CPU intensive and might crash the ESP32.
+    // // Remove these 2 lines in production code.
+    // // logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
+    // // uni_controller_dump(ctl);
 
     switch (ctl->klass) {
         case UNI_CONTROLLER_CLASS_GAMEPAD:
-            gp = &ctl->gamepad;
-            lastGp = ctl->gamepad;
+            controller.update(ctl->gamepad);
+            // gp = &ctl->gamepad;
+            // lastGp = ctl->gamepad;
 
-            // Debugging
-            // Axis ry: control rumble
-            if ((gp->buttons & BUTTON_A) && d->report_parser.play_dual_rumble != NULL) {
-                d->report_parser.play_dual_rumble(d, 0 /* delayed start ms */, 250 /* duration ms */,
-                                                  255 /* weak magnitude */, 0 /* strong magnitude */);
-            }
-            // Buttons: Control LEDs On/Off
-            if ((gp->buttons & BUTTON_B) && d->report_parser.set_player_leds != NULL) {
-                d->report_parser.set_player_leds(d, leds++ & 0x0f);
-            }
-            // Axis: control RGB color
-            if ((gp->buttons & BUTTON_X) && d->report_parser.set_lightbar_color != NULL) {
-                uint8_t r = (gp->axis_x * 256) / 512;
-                uint8_t g = (gp->axis_y * 256) / 512;
-                uint8_t b = (gp->axis_rx * 256) / 512;
-                d->report_parser.set_lightbar_color(d, r, g, b);
-            }
+            // // Debugging
+            // // Axis ry: control rumble
+            // if ((gp->buttons & BUTTON_A) && d->report_parser.play_dual_rumble != NULL) {
+            //     d->report_parser.play_dual_rumble(d, 0 /* delayed start ms */, 250 /* duration ms */,
+            //                                       255 /* weak magnitude */, 0 /* strong magnitude */);
+            // }
+            // // Buttons: Control LEDs On/Off
+            // if ((gp->buttons & BUTTON_B) && d->report_parser.set_player_leds != NULL) {
+            //     d->report_parser.set_player_leds(d, leds++ & 0x0f);
+            // }
+            // // Axis: control RGB color
+            // if ((gp->buttons & BUTTON_X) && d->report_parser.set_lightbar_color != NULL) {
+            //     uint8_t r = (gp->axis_x * 256) / 512;
+            //     uint8_t g = (gp->axis_y * 256) / 512;
+            //     uint8_t b = (gp->axis_rx * 256) / 512;
+            //     d->report_parser.set_lightbar_color(d, r, g, b);
+            // }
 
-            // Toggle Bluetooth connections
-            if ((gp->buttons & BUTTON_SHOULDER_L) && enabled) {
-                logi("*** Stop scanning\n");
-                uni_bt_stop_scanning_safe();
-                enabled = false;
-            }
-            if ((gp->buttons & BUTTON_SHOULDER_R) && !enabled) {
-                logi("*** Start scanning\n");
-                uni_bt_start_scanning_and_autoconnect_safe();
-                enabled = true;
-            }
+            // // Toggle Bluetooth connections
+            // if ((gp->buttons & BUTTON_SHOULDER_L) && enabled) {
+            //     logi("*** Stop scanning\n");
+            //     uni_bt_stop_scanning_safe();
+            //     enabled = false;
+            // }
+            // if ((gp->buttons & BUTTON_SHOULDER_R) && !enabled) {
+            //     logi("*** Start scanning\n");
+            //     uni_bt_start_scanning_and_autoconnect_safe();
+            //     enabled = true;
+            // }
             
-            if (gp->dpad & DPAD_UP){
-                logi("DPAD_UP\n");
-            }
-            if (gp->dpad & DPAD_LEFT){
-                logi("DPAD_LEFT LED an\n");
-                gpio_set_level(LED_PIN, 1);   // LED an
-            }
-            if (gp->dpad & DPAD_RIGHT){
-                logi("DPAD_RIGHT LED aus\n");
-                gpio_set_level(LED_PIN, 0);   // LED aus
-            }
+            // if (gp->dpad & DPAD_UP){
+            //     logi("DPAD_UP\n");
+            // }
+            // if (gp->dpad & DPAD_LEFT){
+            //     logi("DPAD_LEFT LED an\n");
+            //     gpio_set_level(LED_PIN, 1);   // LED an
+            // }
+            // if (gp->dpad & DPAD_RIGHT){
+            //     logi("DPAD_RIGHT LED aus\n");
+            //     gpio_set_level(LED_PIN, 0);   // LED aus
+            // }
             break;
         default:
             break;
@@ -295,10 +300,11 @@ void myMainTask(void* p) {
     while (1) {
         uint64_t now = esp_timer_get_time();
 
-        // alle 100 ms
-        if (now - last > 500000) {
+        // alle 10 ms
+        if (now - last > 10000) {
             last = now;
-            logi("Main loop 500 ms\n");
+            //logi("Main loop 10 ms\n");
+            controller.process();
 
         }
 
