@@ -276,6 +276,10 @@ void myMainTask(void* p) {
     uint64_t last = esp_timer_get_time(); // µs
     static bool buwizz_started = false;
     static uint64_t buwizz_start_time = esp_timer_get_time();
+    // In myMainTask
+    static bool mode_sent = false;
+    static bool test_motors_sent = false;
+    static uint64_t connection_timestamp = 0;
 
     while (1) {
         uint64_t now = esp_timer_get_time();
@@ -295,16 +299,34 @@ void myMainTask(void* p) {
 
         eventManager.process();
 
-        // // ⭐ BuWizz erst starten, wenn System stabil läuft
-        // if (!buwizz_started && (now - buwizz_start_time > 1500000)) { // 1.5 Sekunden
-        //     logi("Starting BuWizz GATT client...");
-        //     // test_buwizz_connect();
-        //     buwizz_started = true;
-        // }
         buwizz.process();
         if (!buwizz_started && (now - buwizz_start_time > 1500000)) {
             buwizz.connect();
             buwizz_started = true;
+        }
+        // 1. Verbindung prüfen
+        if (buwizz.isConnected()) {
+            // Wir merken uns, wann die Verbindung STABIL wurde
+            if (connection_timestamp == 0) connection_timestamp = now;
+
+            // 2. Nach 2 Sekunden Verbindung: Modus setzen
+            if (!mode_sent && (now - connection_timestamp > 2000000)) {
+                printf("Main: Sende Ludicrous Mode...\n");
+                buwizz.setMode(4);
+                mode_sent = true;
+            }
+
+            // 3. Nach 4 Sekunden Verbindung: Kurzer Motor-Test
+            if (mode_sent && !test_motors_sent && (now - connection_timestamp > 4000000)) {
+                printf("Main: Sende Motor-Test-Befehl...\n");
+                buwizz.setMotors(120, 120, 120, 120);
+                test_motors_sent = true;
+            }
+        } else {
+            // Reset, falls die Verbindung abbricht
+            connection_timestamp = 0;
+            mode_sent = false;
+            test_motors_sent = false;
         }
 
         // CPU freigeben (wichtig!)
