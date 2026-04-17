@@ -33,7 +33,7 @@ public:
     void printSticks();
     void printTriggers();
 
-private:
+protected:
     uni_gamepad_t gamepad{};
     bool hasGamepad = false;
     bool connected = false;

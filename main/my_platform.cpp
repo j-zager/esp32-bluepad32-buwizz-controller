@@ -15,9 +15,14 @@ extern "C" {
 
 #include <uni.h>
 
-#include "MyControllerEx.h"
+// #include "MyControllerEx.h"
 
-static MyControllerEx controller;
+// static MyControllerEx controller;
+
+#include "MyControllerConfig.h"
+
+static MyControllerConfig controller;
+
 
 void myMainTask(void* p);
 static void initPins();
@@ -139,7 +144,9 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
 
     switch (ctl->klass) {
         case UNI_CONTROLLER_CLASS_GAMEPAD:
-            controller.update(ctl->gamepad);
+            // controller.update(ctl->gamepad);
+            controller.update(ctl->gamepad, d, ctl->battery);
+
             // gp = &ctl->gamepad;
             // lastGp = ctl->gamepad;
 
@@ -296,6 +303,7 @@ extern "C" struct uni_platform* get_my_platform(void) {
 
 void myMainTask(void* p) {
     uint64_t last = esp_timer_get_time(); // µs
+    uint64_t lastBattery = esp_timer_get_time();
 
     while (1) {
         uint64_t now = esp_timer_get_time();
@@ -304,9 +312,10 @@ void myMainTask(void* p) {
         if (now - last > 10000) {
             last = now;
             //logi("Main loop 10 ms\n");
-            controller.process();
-
+            controller.process();          // Press/Release, Sticks, etc.
         }
+        controller.updateBatteryLED(now); // Batterie-LED-Logik
+
 
         // CPU freigeben (wichtig!)
         vTaskDelay(1);

@@ -1,0 +1,98 @@
+#include "MyControllerConfig.h"
+
+extern "C" {
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "driver/gpio.h"
+}
+
+static const char* TAG = "MyControllerConfig";
+
+MyControllerConfig::MyControllerConfig() {}
+
+void MyControllerConfig::update(const uni_gamepad_t& gp, uni_hid_device_t* dev, int bat) {
+    MyControllerEx::update(gp);
+    device = dev;
+    battery = bat;   // 0–100
+}
+
+
+void MyControllerConfig::setColor(uint8_t r, uint8_t g, uint8_t b) {
+    if (!device) return;
+    if (device->report_parser.set_lightbar_color)
+        device->report_parser.set_lightbar_color(device, r, g, b);
+}
+
+void MyControllerConfig::rumble(uint8_t weak, uint8_t strong, uint16_t duration_ms) {
+    if (!device) return;
+    if (device->report_parser.play_dual_rumble)
+        device->report_parser.play_dual_rumble(device, 0, duration_ms, weak, strong);
+}
+
+int MyControllerConfig::getBattery() const {
+    return battery;   // 0–100 %
+}
+
+void MyControllerConfig::updateBatteryLED(uint64_t now) {
+    static uint64_t lastUpdate = 0;
+    if (now - lastUpdate < 5000000) return; // alle 5s
+    lastUpdate = now;
+
+    int bat = getBattery();
+    if (bat < 0) return;
+
+    // --- Kritische Stufen: Blinken ---
+    if (bat < 5) {
+        bool on = ((now / 250000) % 2) == 0;   // 2 Hz
+        setColor(on ? 255 : 0, 0, 0);
+        return;
+    }
+
+    if (bat < 10) {
+        bool on = ((now / 500000) % 2) == 0;   // 1 Hz
+        setColor(on ? 255 : 0, 0, 0);
+        return;
+    }
+
+    // --- Sony-Stufen ---
+    if (bat >= 75) {
+        setColor(0, 0, 255);     // Blau
+    }
+    else if (bat >= 50) {
+        setColor(0, 255, 0);     // Grün
+    }
+    else if (bat >= 25) {
+        setColor(255, 255, 0);   // Gelb
+    }
+    else {
+        setColor(255, 0, 0);     // Rot
+    }
+}
+
+void MyControllerConfig::onPress(const char* name) {
+    ESP_LOGI(TAG, "[PRESS] %s", name);
+
+    if (strcmp(name, "up") == 0)
+        setColor(0, 255, 0);
+
+    if (strcmp(name, "down") == 0)
+        setColor(255, 0, 0);
+
+    if (strcmp(name, "circle") == 0)
+        rumble(255, 0, 200);
+
+
+    if (strcmp(name, "left") == 0){
+        ESP_LOGI(TAG,"DPAD_LEFT LED an\n");
+        gpio_set_level(GPIO_NUM_2, 1);   // LED an
+    }
+    if (strcmp(name, "right") == 0){
+        ESP_LOGI(TAG,"DPAD_RIGHT LED aus\n");
+        gpio_set_level(GPIO_NUM_2, 0);   // LED an
+    }
+
+}
+
+void MyControllerConfig::onRelease(const char* name, float duration) {
+    ESP_LOGI(TAG, "[RELEASE] %s (%.2fs)", name, duration);
+}
