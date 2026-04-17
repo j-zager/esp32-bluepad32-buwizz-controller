@@ -5,8 +5,10 @@ extern "C" {
 #include "esp_timer.h"
 #include "driver/gpio.h"
 }
+#include "controllerEventManager.h"
 #include "slot_helpers.h"
 
+extern ControllerEventManager eventManager;
 
 static const char* TAG = "MyControllerConfig";
 
@@ -117,81 +119,156 @@ void MyControllerConfig::updateBatteryLED(uint64_t now) {
     }
 }
 
+// void MyControllerConfig::onPress(const char* name) {
+//     //ESP_LOGI(TAG, "[PRESS] %s", name);
+//     int slot = findSlotForDevice(device);
+//     ESP_LOGI(TAG, "[PRESS] slot=%d  %s", slot, name);
+
+//     if (strcmp(name, "up") == 0)
+//         setColor(0, 255, 0);
+
+//     if (strcmp(name, "down") == 0)
+//         setColor(255, 0, 0);
+
+//     if (strcmp(name, "circle") == 0)
+//         rumble(255, 0, 200);
+
+
+//     if (strcmp(name, "left") == 0){
+//         ESP_LOGI(TAG,"DPAD_LEFT LED an");
+//         gpio_set_level(GPIO_NUM_2, 1);   // LED an
+//     }
+//     if (strcmp(name, "right") == 0){
+//         ESP_LOGI(TAG,"DPAD_RIGHT LED aus");
+//         gpio_set_level(GPIO_NUM_2, 0);   // LED an
+//     }
+
+// }
+
+// void MyControllerConfig::onRelease(const char* name, float duration) {
+//     ESP_LOGI(TAG, "[RELEASE] %s (%.2fs)", name, duration);
+// }
+
+
+// void MyControllerConfig::onStick(const char* name, float x, float y) {
+//     ESP_LOGI(TAG, "[STICK] %s: x=%.2f y=%.2f", name, x, y);
+
+//     if (strcmp(name, "left") == 0) {
+//         // z.B. Motorsteuerung später
+//         // mappe x/y auf Motoren
+//     }
+// }
+
+// void MyControllerConfig::onTrigger(const char* name, float value, bool pressed) {
+//     ESP_LOGI(TAG, "[TRIGGER] %s: %.2f (pressed=%d)", name, value, pressed);
+
+//     if (strcmp(name, "L2") == 0 && pressed && value > 0.8f) {
+//         rumble(255, 0, 100);
+//     }
+
+//     if (strcmp(name, "R2") == 0 && value > 0.5f) {
+//         // z.B. LED heller machen, Motor schneller, etc.
+//     }
+// }
+
+// void MyControllerConfig::onGyro(float gx, float gy, float gz) {
+//     //ESP_LOGI(TAG, "[GYRO] gx=%.2f gy=%.2f gz=%.2f", gx, gy, gz);
+// }
+
+// void MyControllerConfig::onAccel(float ax, float ay, float az) {
+//     //ESP_LOGI(TAG, "[ACCEL] ax=%.2f ay=%.2f az=%.2f", ax, ay, az);
+// }
+
+// void MyControllerConfig::onLongPress(const char* name, float duration) {
+//     ESP_LOGI(TAG, "[LONG] %s (%.2fs)", name, duration);
+//     rumble(0, 255, 150);
+//     if (strcmp(name, "options") == 0 && duration > 4.0f) {
+//         ESP_LOGI(TAG,"options long press → restarting gyro calibration\n");
+//         startGyroCalibration();   
+//     }
+// }
+
+// void MyControllerConfig::onDoublePress(const char* name) {
+//     ESP_LOGI(TAG, "[DOUBLE] %s", name);
+//     setColor(255, 255, 0);
+// }
+
+
+
+
+
 void MyControllerConfig::onPress(const char* name) {
-    //ESP_LOGI(TAG, "[PRESS] %s", name);
-    int slot = findSlotForDevice(device);
-    ESP_LOGI(TAG, "[PRESS] slot=%d  %s", slot, name);
-
-    if (strcmp(name, "up") == 0)
-        setColor(0, 255, 0);
-
-    if (strcmp(name, "down") == 0)
-        setColor(255, 0, 0);
-
-    if (strcmp(name, "circle") == 0)
-        rumble(255, 0, 200);
-
-
-    if (strcmp(name, "left") == 0){
-        ESP_LOGI(TAG,"DPAD_LEFT LED an");
-        gpio_set_level(GPIO_NUM_2, 1);   // LED an
-    }
-    if (strcmp(name, "right") == 0){
-        ESP_LOGI(TAG,"DPAD_RIGHT LED aus");
-        gpio_set_level(GPIO_NUM_2, 0);   // LED an
-    }
-
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_PRESS;
+    ev.name = name;
+    eventManager.push(ev);
 }
 
 void MyControllerConfig::onRelease(const char* name, float duration) {
-    ESP_LOGI(TAG, "[RELEASE] %s (%.2fs)", name, duration);
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_RELEASE;
+    ev.name = name;
+    ev.duration = duration;
+    eventManager.push(ev);
 }
 
-
 void MyControllerConfig::onStick(const char* name, float x, float y) {
-    ESP_LOGI(TAG, "[STICK] %s: x=%.2f y=%.2f", name, x, y);
-
-    if (strcmp(name, "left") == 0) {
-        // z.B. Motorsteuerung später
-        // mappe x/y auf Motoren
-    }
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_STICK;
+    ev.name = name;
+    ev.x = x;
+    ev.y = y;
+    eventManager.push(ev);
 }
 
 void MyControllerConfig::onTrigger(const char* name, float value, bool pressed) {
-    ESP_LOGI(TAG, "[TRIGGER] %s: %.2f (pressed=%d)", name, value, pressed);
-
-    if (strcmp(name, "L2") == 0 && pressed && value > 0.8f) {
-        rumble(255, 0, 100);
-    }
-
-    if (strcmp(name, "R2") == 0 && value > 0.5f) {
-        // z.B. LED heller machen, Motor schneller, etc.
-    }
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_TRIGGER;
+    ev.name = name;
+    ev.value = value;
+    ev.duration = pressed ? 1.0f : 0.0f;
+    eventManager.push(ev);
 }
 
 void MyControllerConfig::onGyro(float gx, float gy, float gz) {
-    //ESP_LOGI(TAG, "[GYRO] gx=%.2f gy=%.2f gz=%.2f", gx, gy, gz);
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_GYRO;
+    ev.gx = gx;
+    ev.gy = gy;
+    ev.gz = gz;
+    eventManager.push(ev);
 }
 
 void MyControllerConfig::onAccel(float ax, float ay, float az) {
-    //ESP_LOGI(TAG, "[ACCEL] ax=%.2f ay=%.2f az=%.2f", ax, ay, az);
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_ACCEL;
+    ev.ax = ax;
+    ev.ay = ay;
+    ev.az = az;
+    eventManager.push(ev);
 }
 
 void MyControllerConfig::onLongPress(const char* name, float duration) {
-    ESP_LOGI(TAG, "[LONG] %s (%.2fs)", name, duration);
-    rumble(0, 255, 150);
-    if (strcmp(name, "options") == 0 && duration > 4.0f) {
-        ESP_LOGI(TAG,"options long press → restarting gyro calibration\n");
-        startGyroCalibration();   
-    }
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_LONGPRESS;
+    ev.name = name;
+    ev.duration = duration;
+    eventManager.push(ev);
 }
 
 void MyControllerConfig::onDoublePress(const char* name) {
-    ESP_LOGI(TAG, "[DOUBLE] %s", name);
-    setColor(255, 255, 0);
+    ControllerEvent ev{};
+    ev.slot = findSlotForDevice(device);
+    ev.type = EVENT_DOUBLEPRESS;
+    ev.name = name;
+    eventManager.push(ev);
 }
-
-
-
 
 

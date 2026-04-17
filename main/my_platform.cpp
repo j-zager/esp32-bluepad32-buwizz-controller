@@ -18,17 +18,14 @@ extern "C" {
 #include "MyControllerConfig.h"
 #include "slot_helpers.h"
 
+#include "controllerEventManager.h"
 
 
-// Maximal 4 Controller
-static MyControllerConfig controllers[4];
-
-
+extern MyControllerConfig controllers[4];
+extern ControllerEventManager eventManager;
 
 void myMainTask(void* p);
 static void initPins();
-// int findFreeSlot();
-// int findSlotForDevice(uni_hid_device_t* d);
 
 // Custom "instance"
 typedef struct my_platform_instance_s {
@@ -287,6 +284,7 @@ void myMainTask(void* p) {
             controllers[i].updateBatteryLED(now);
         }
 
+        eventManager.process();
 
         // CPU freigeben (wichtig!)
         vTaskDelay(1);
@@ -305,19 +303,3 @@ static void initPins() {
 
     gpio_set_level(LED_PIN, 0);   // LED aus
 }
-
-// int findFreeSlot() {
-//     for (int i = 0; i < 4; i++) {
-//         if (deviceForSlot[i] == nullptr)
-//             return i;
-//     }
-//     return -1;
-// }
-
-// int findSlotForDevice(uni_hid_device_t* d) {
-//     for (int i = 0; i < 4; i++) {
-//         if (deviceForSlot[i] == d)
-//             return i;
-//     }
-//     return -1;
-// }

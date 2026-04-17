@@ -12,6 +12,14 @@
 
 #include "sdkconfig.h"
 
+#include "controllerEventManager.h"
+#include "MyControllerConfig.h"
+
+// Maximal 4 Controller
+MyControllerConfig controllers[4];
+ControllerEventManager eventManager;   
+
+
 // Sanity check
 #ifndef CONFIG_BLUEPAD32_PLATFORM_CUSTOM
 #error "Must use BLUEPAD32_PLATFORM_CUSTOM"
