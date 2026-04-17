@@ -19,6 +19,7 @@ extern "C" {
 #include "slot_helpers.h"
 
 #include "controllerEventManager.h"
+#include "buwizz.h"
 
 
 extern MyControllerConfig controllers[4];
@@ -67,6 +68,9 @@ static void my_platform_init(int argc, const char** argv) {
 static void my_platform_on_init_complete(void) {
     logi("custom: on_init_complete()\n");
 
+    esp_bluedroid_enable();
+
+
     // Safe to call "unsafe" functions since they are called from BT thread
 
     // Start scanning
@@ -84,6 +88,7 @@ static void my_platform_on_init_complete(void) {
     initPins();
     // Deine Task starten
     xTaskCreate(myMainTask, "my_task", 4096, NULL, 5, NULL);
+
 }
 
 static uni_error_t my_platform_on_device_discovered(bd_addr_t addr, const char* name, uint16_t cod, uint8_t rssi) {
@@ -267,6 +272,8 @@ extern "C" struct uni_platform* get_my_platform(void) {
 
 void myMainTask(void* p) {
     uint64_t last = esp_timer_get_time(); // µs
+    static bool buwizz_started = false;
+    static uint64_t buwizz_start_time = esp_timer_get_time();
 
     while (1) {
         uint64_t now = esp_timer_get_time();
@@ -285,6 +292,13 @@ void myMainTask(void* p) {
         }
 
         eventManager.process();
+
+        // ⭐ BuWizz erst starten, wenn System stabil läuft
+        if (!buwizz_started && (now - buwizz_start_time > 1500000)) { // 1.5 Sekunden
+            ESP_LOGI("MAIN", "Starting BuWizz GATT client...");
+            test_buwizz_connect();
+            buwizz_started = true;
+        }
 
         // CPU freigeben (wichtig!)
         vTaskDelay(1);
