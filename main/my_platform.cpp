@@ -1,9 +1,20 @@
 // Example file - Public Domain
 // Need help? https://tinyurl.com/bluepad32-help
 
+extern "C" {
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+}
+
 #include <string.h>
 
 #include <uni.h>
+
+void myMainTask(void* p);
+
+static uni_gamepad_t last_gp = {};
+
 
 // Custom "instance"
 typedef struct my_platform_instance_s {
@@ -56,6 +67,8 @@ static void my_platform_on_init_complete(void) {
         uni_bt_del_keys_unsafe();
     else
         uni_bt_list_keys_unsafe();
+
+    xTaskCreate(myMainTask, "my_task", 4096, NULL, 5, NULL);
 }
 
 static uni_error_t my_platform_on_device_discovered(bd_addr_t addr, const char* name, uint16_t cod, uint8_t rssi) {
@@ -108,8 +121,8 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
     // Print device Id before dumping gamepad.
     // This could be very CPU intensive and might crash the ESP32.
     // Remove these 2 lines in production code.
-    //    logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
-    //    uni_controller_dump(ctl);
+    // logi("(%p), id=%d, \n", d, uni_hid_device_get_idx_for_instance(d));
+    // uni_controller_dump(ctl);
 
     switch (ctl->klass) {
         case UNI_CONTROLLER_CLASS_GAMEPAD:
@@ -143,6 +156,10 @@ static void my_platform_on_controller_data(uni_hid_device_t* d, uni_controller_t
                 logi("*** Start scanning\n");
                 uni_bt_start_scanning_and_autoconnect_safe();
                 enabled = true;
+            }
+            
+            if (gp->dpad & DPAD_UP){
+                logi("DPAD_UP\n");
             }
             break;
         default:
@@ -252,3 +269,22 @@ extern "C" struct uni_platform* get_my_platform(void) {
     return &plat;
 }
 
+
+
+void myMainTask(void* p) {
+    uint64_t last = esp_timer_get_time(); // µs
+
+    while (1) {
+        uint64_t now = esp_timer_get_time();
+
+        // alle 100 ms
+        if (now - last > 100000) {
+            last = now;
+            logi("Main loop 500 ms\n");
+
+        }
+
+        // CPU freigeben (wichtig!)
+        vTaskDelay(1);
+    }
+}
