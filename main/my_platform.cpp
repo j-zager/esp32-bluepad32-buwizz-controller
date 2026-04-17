@@ -311,8 +311,8 @@ void myMainTask(void* p) {
 
             // 2. Nach 2 Sekunden Verbindung: Modus setzen
             if (!mode_sent && (now - connection_timestamp > 2000000)) {
-                printf("Main: Sende Ludicrous Mode...\n");
-                buwizz.setMode(1);
+                printf("Main: Sende Fast Mode...\n");
+                buwizz.setMode(3);
                 mode_sent = true;
             }
 
@@ -323,13 +323,6 @@ void myMainTask(void* p) {
                 test_motors_sent = true;
             }
 
-            // // 3. Nach 4 Sekunden Verbindung: Kurzer Motor-Test
-            // if (mode_sent && test_motors_sent && (now - connection_timestamp > 8000000)) {
-            //     printf("Main: Sende Motor-Test-Befehl...\n");
-            //     buwizz.setMode(3);
-            //     buwizz.setMotors(120, 120, 120, 120);
-            //     test_motors_sent = true;
-            // }
         } else {
             // Reset, falls die Verbindung abbricht
             connection_timestamp = 0;
