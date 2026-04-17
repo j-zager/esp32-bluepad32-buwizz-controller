@@ -107,3 +107,19 @@ tio /dev/ttyACM0
     - Free to use for open source projects.
     - Paid for commercial projects.
     - <https://github.com/bluekitchen/btstack/blob/master/LICENSE>
+
+## Introduction 
+A clean and extensible ESP‑IDF project that combines Bluepad32 (PS4 controller support) with a fully modular BuWizz BLE client for LEGO robotics.
+The project provides a dedicated controller class implementing press, long‑press, double‑press, trigger, and analog stick events, while maintaining stable, parallel BLE communication with one or more BuWizz devices.
+
+The architecture emphasizes:
+
+Strict separation of concerns (Controller module, BuWizz module, Application layer)
+
+Deterministic event handling via a custom PS4 input state machine
+
+Reliable BLE operation through queued GATT writes and explicit service/characteristic discovery
+
+Scalability for multi‑BuWizz setups
+
+Reproducible ESP‑IDF workflows with no hidden configuration overrides
