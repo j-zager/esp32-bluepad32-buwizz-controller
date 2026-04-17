@@ -247,7 +247,6 @@ extern "C" struct uni_platform* get_my_platform(void) {
 
 void myMainTask(void* p) {
     uint64_t last = esp_timer_get_time(); // µs
-    uint64_t lastBattery = esp_timer_get_time();
 
     while (1) {
         uint64_t now = esp_timer_get_time();

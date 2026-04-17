@@ -19,6 +19,12 @@ public:
     void onStick(const char* name, float x, float y) override;
     void onTrigger(const char* name, float value, bool pressed) override;
 
+    void onGyro(float gx, float gy, float gz);
+    void onAccel(float ax, float ay, float az);
+
+    void onLongPress(const char* name, float duration);
+    void onDoublePress(const char* name);
+
     void setColor(uint8_t r, uint8_t g, uint8_t b);
     void rumble(uint8_t weak, uint8_t strong, uint16_t duration_ms);
     

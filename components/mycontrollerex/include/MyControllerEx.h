@@ -12,6 +12,8 @@ public:
     static constexpr int BUTTON_COUNT = 16;
     static constexpr float TRIGGER_THRESHOLD = 0.1f;
     static constexpr int DEADZONE_RADIUS = 80;
+    static constexpr float LONG_PRESS_THRESHOLD = 0.5f;     // Sekunden
+    static constexpr float DOUBLE_PRESS_THRESHOLD = 0.25f;  // Sekunden
 
     MyControllerEx();
 
@@ -30,11 +32,20 @@ public:
     float getL2();
     float getR2();
 
+    void getGyro(float& gx, float& gy, float& gz);
+    void getAccel(float& ax, float& ay, float& az);
+
     // Events
     virtual void onPress(const char* name);
     virtual void onRelease(const char* name, float duration);
     virtual void onStick(const char* name, float x, float y);
     virtual void onTrigger(const char* name, float value, bool pressed);
+
+    virtual void onGyro(float gx, float gy, float gz);
+    virtual void onAccel(float ax, float ay, float az);
+    virtual void onLongPress(const char* name, float duration);
+    virtual void onDoublePress(const char* name);
+
 
     // Debug-Ausgabe
     void printSticks();
@@ -58,6 +69,10 @@ protected:
     float prevL2 = 0.0f;
     float prevR2 = 0.0f;
 
+    float prevGX = 0, prevGY = 0, prevGZ = 0;
+    float prevAX = 0, prevAY = 0, prevAZ = 0;
+
+
     struct ButtonMapEntry {
         const char* name;
         int id;
@@ -67,6 +82,8 @@ protected:
     ButtonMapEntry buttonMap[BUTTON_COUNT];
     bool buttonStates[BUTTON_COUNT];
     uint64_t buttonTimes[BUTTON_COUNT]; // µs
+    // --- für Double‑Press ---
+    uint64_t lastPressTime[BUTTON_COUNT];
 
     // Deadzone & Normalisierung
     void applyDeadzone(int &x, int &y);

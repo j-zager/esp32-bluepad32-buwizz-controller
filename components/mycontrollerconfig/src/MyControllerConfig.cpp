@@ -119,3 +119,26 @@ void MyControllerConfig::onTrigger(const char* name, float value, bool pressed) 
         // z.B. LED heller machen, Motor schneller, etc.
     }
 }
+
+void MyControllerConfig::onGyro(float gx, float gy, float gz) {
+    ESP_LOGI(TAG, "[GYRO] gx=%.2f gy=%.2f gz=%.2f", gx, gy, gz);
+}
+
+void MyControllerConfig::onAccel(float ax, float ay, float az) {
+    ESP_LOGI(TAG, "[ACCEL] ax=%.2f ay=%.2f az=%.2f", ax, ay, az);
+}
+
+void MyControllerConfig::onLongPress(const char* name, float duration) {
+    ESP_LOGI(TAG, "[LONG] %s (%.2fs)", name, duration);
+    rumble(0, 255, 150);
+}
+
+void MyControllerConfig::onDoublePress(const char* name) {
+    ESP_LOGI(TAG, "[DOUBLE] %s", name);
+    setColor(255, 255, 0);
+}
+
+
+
+
+

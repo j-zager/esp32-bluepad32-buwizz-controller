@@ -35,6 +35,7 @@ MyControllerEx::MyControllerEx() {
     for (int i = 0; i < BUTTON_COUNT; i++) {
         buttonStates[i] = false;
         buttonTimes[i] = 0;
+        lastPressTime[i] = 0;
     }
 }
 
@@ -83,6 +84,20 @@ float MyControllerEx::getR2() {
     return norm(gamepad.throttle, 1023);
 }
 
+void MyControllerEx::getGyro(float& gx, float& gy, float& gz) {
+    if (!hasGamepad) { gx = gy = gz = 0; return; }
+    gx = gamepad.gyro[0];
+    gy = gamepad.gyro[1];
+    gz = gamepad.gyro[2];
+}
+
+void MyControllerEx::getAccel(float& ax, float& ay, float& az) {
+    if (!hasGamepad) { ax = ay = az = 0; return; }
+    ax = gamepad.accel[0];
+    ay = gamepad.accel[1];
+    az = gamepad.accel[2];
+}
+
 bool MyControllerEx::isPressed(int id) {
     if (!hasGamepad) return false;
 
@@ -121,18 +136,50 @@ bool MyControllerEx::isPressed(int id) {
 
 void MyControllerEx::updateButton(int index, bool pressed) {
     bool prev = buttonStates[index];
+    uint64_t now = esp_timer_get_time();
 
     if (pressed && !prev) {
         buttonStates[index] = true;
-        buttonTimes[index] = esp_timer_get_time();
+        buttonTimes[index] = now;
+
+        if (now - lastPressTime[index] < DOUBLE_PRESS_THRESHOLD * 1e6f) {
+            onDoublePress(buttonMap[index].name);
+        }
+
+        lastPressTime[index] = now;
         onPress(buttonMap[index].name);
-    } else if (!pressed && prev) {
+        return;
+    }
+
+    if (!pressed && prev) {
         buttonStates[index] = false;
-        uint64_t now = esp_timer_get_time();
+
         float duration = (now - buttonTimes[index]) / 1e6f;
-        onRelease(buttonMap[index].name, duration);
+
+        if (duration >= LONG_PRESS_THRESHOLD) {
+            onLongPress(buttonMap[index].name, duration);
+        } else {
+            onRelease(buttonMap[index].name, duration);
+        }
     }
 }
+
+
+// void MyControllerEx::updateButton(int index, bool pressed) {
+//     bool prev = buttonStates[index];
+
+//     if (pressed && !prev) {
+//         buttonStates[index] = true;
+//         buttonTimes[index] = esp_timer_get_time();
+//         onPress(buttonMap[index].name);
+//     } else if (!pressed && prev) {
+//         buttonStates[index] = false;
+//         uint64_t now = esp_timer_get_time();
+//         float duration = (now - buttonTimes[index]) / 1e6f;
+//         onRelease(buttonMap[index].name, duration);
+//     }
+// }
+
 
 void MyControllerEx::process() {
     if (!hasGamepad)
@@ -177,6 +224,28 @@ void MyControllerEx::process() {
         onTrigger("R2", nR2, nR2 > TRIGGER_THRESHOLD);
         prevR2 = nR2;
     }
+
+        // --- Gyro ---
+    float gx, gy, gz;
+    getGyro(gx, gy, gz);
+    if (gx != prevGX || gy != prevGY || gz != prevGZ) {
+        onGyro(gx, gy, gz);
+        prevGX = gx;
+        prevGY = gy;
+        prevGZ = gz;
+    }
+
+    // --- Accel ---
+    float ax, ay, az;
+    getAccel(ax, ay, az);
+    if (ax != prevAX || ay != prevAY || az != prevAZ) {
+        onAccel(ax, ay, az);
+        prevAX = ax;
+        prevAY = ay;
+        prevAZ = az;
+    }
+
+
 }
 
 
@@ -221,6 +290,8 @@ void MyControllerEx::printTriggers() {
     if (nr2 > 0) ESP_LOGI(TAG, "R2: %.2f", nr2);
 }
 
+
+
 void MyControllerEx::onPress(const char* name) {
     ESP_LOGI(TAG, "[PRESS] %s", name);
 }
@@ -235,4 +306,20 @@ void MyControllerEx::onStick(const char* name, float x, float y) {
 
 void MyControllerEx::onTrigger(const char* name, float value, bool pressed) {
     // default: nichts
+}
+
+void MyControllerEx::onGyro(float gx, float gy, float gz) {
+    // default: nothing
+}
+
+void MyControllerEx::onAccel(float ax, float ay, float az) {
+    // default: nothing
+}
+
+void MyControllerEx::onLongPress(const char* name, float duration) {
+    // default: nothing
+}
+
+void MyControllerEx::onDoublePress(const char* name) {
+    // default: nothing
 }
