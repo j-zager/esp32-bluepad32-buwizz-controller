@@ -16,6 +16,9 @@ public:
     void onPress(const char* name) override;
     void onRelease(const char* name, float duration) override;
 
+    void onStick(const char* name, float x, float y) override;
+    void onTrigger(const char* name, float value, bool pressed) override;
+
     void setColor(uint8_t r, uint8_t g, uint8_t b);
     void rumble(uint8_t weak, uint8_t strong, uint16_t duration_ms);
     

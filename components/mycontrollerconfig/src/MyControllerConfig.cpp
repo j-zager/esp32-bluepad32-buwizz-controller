@@ -83,11 +83,11 @@ void MyControllerConfig::onPress(const char* name) {
 
 
     if (strcmp(name, "left") == 0){
-        ESP_LOGI(TAG,"DPAD_LEFT LED an\n");
+        ESP_LOGI(TAG,"DPAD_LEFT LED an");
         gpio_set_level(GPIO_NUM_2, 1);   // LED an
     }
     if (strcmp(name, "right") == 0){
-        ESP_LOGI(TAG,"DPAD_RIGHT LED aus\n");
+        ESP_LOGI(TAG,"DPAD_RIGHT LED aus");
         gpio_set_level(GPIO_NUM_2, 0);   // LED an
     }
 
@@ -95,4 +95,26 @@ void MyControllerConfig::onPress(const char* name) {
 
 void MyControllerConfig::onRelease(const char* name, float duration) {
     ESP_LOGI(TAG, "[RELEASE] %s (%.2fs)", name, duration);
+}
+
+
+void MyControllerConfig::onStick(const char* name, float x, float y) {
+    ESP_LOGI(TAG, "[STICK] %s: x=%.2f y=%.2f", name, x, y);
+
+    if (strcmp(name, "left") == 0) {
+        // z.B. Motorsteuerung später
+        // mappe x/y auf Motoren
+    }
+}
+
+void MyControllerConfig::onTrigger(const char* name, float value, bool pressed) {
+    ESP_LOGI(TAG, "[TRIGGER] %s: %.2f (pressed=%d)", name, value, pressed);
+
+    if (strcmp(name, "L2") == 0 && pressed && value > 0.8f) {
+        rumble(255, 0, 100);
+    }
+
+    if (strcmp(name, "R2") == 0 && value > 0.5f) {
+        // z.B. LED heller machen, Motor schneller, etc.
+    }
 }

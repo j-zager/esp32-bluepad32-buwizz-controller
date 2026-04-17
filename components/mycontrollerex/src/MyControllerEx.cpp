@@ -23,7 +23,7 @@ MyControllerEx::MyControllerEx() {
     buttonMap[12] = {"left",      12};
     buttonMap[13] = {"right",     13};
 
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < BUTTON_COUNT; i++) {
         buttonStates[i] = false;
         buttonTimes[i] = 0;
     }
@@ -36,7 +36,7 @@ void MyControllerEx::update(const uni_gamepad_t& gp) {
 
 void MyControllerEx::applyDeadzone(int &x, int &y) {
     long mag = (long)x * x + (long)y * y;
-    if (mag < 80L * 80L) {
+    if (mag < (long)DEADZONE_RADIUS * DEADZONE_RADIUS) {
         x = 0;
         y = 0;
     }
@@ -115,6 +115,53 @@ void MyControllerEx::process() {
     if (!hasGamepad)
         return;
 
+    // --- Buttons ---
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+        bool pressed = isPressed(buttonMap[i].id);
+        updateButton(i, pressed);
+    }
+
+    // --- Left Stick ---
+    float nlx, nly;
+    getLeftStick(nlx, nly);
+
+    if (nlx != prevLX || nly != prevLY) {
+        onStick("left", nlx, nly);
+        prevLX = nlx;
+        prevLY = nly;
+    }
+
+    // --- Right Stick ---
+    float nrx, nry;
+    getRightStick(nrx, nry);
+
+    if (nrx != prevRX || nry != prevRY) {
+        onStick("right", nrx, nry);
+        prevRX = nrx;
+        prevRY = nry;
+    }
+
+    // --- Trigger L2 ---
+    float nL2 = getL2();
+    if (nL2 != prevL2) {
+        onTrigger("L2", nL2, nL2 > TRIGGER_THRESHOLD);
+        prevL2 = nL2;
+    }
+
+    // --- Trigger R2 ---
+    float nR2 = getR2();
+    if (nR2 != prevR2) {
+        onTrigger("R2", nR2, nR2 > TRIGGER_THRESHOLD);
+        prevR2 = nR2;
+    }
+}
+
+
+
+void MyControllerEx::processPrint() {
+    if (!hasGamepad)
+        return;
+
     // Rohwerte
     lx = gamepad.axis_x;
     ly = gamepad.axis_y;
@@ -123,7 +170,7 @@ void MyControllerEx::process() {
     l2 = gamepad.brake;
     r2 = gamepad.throttle;
 
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < BUTTON_COUNT; i++) {
         bool pressed = isPressed(buttonMap[i].id);
         updateButton(i, pressed);
     }
@@ -157,4 +204,12 @@ void MyControllerEx::onPress(const char* name) {
 
 void MyControllerEx::onRelease(const char* name, float duration) {
     ESP_LOGI(TAG, "[RELEASE] %s (%.2fs)", name, duration);
+}
+
+void MyControllerEx::onStick(const char* name, float x, float y) {
+    // default: nichts
+}
+
+void MyControllerEx::onTrigger(const char* name, float value, bool pressed) {
+    // default: nichts
 }
