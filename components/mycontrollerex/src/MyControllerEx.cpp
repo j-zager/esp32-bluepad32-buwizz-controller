@@ -125,9 +125,10 @@ void MyControllerEx::processGyro(uint64_t now) {
 
     // 2. Kalibrierung läuft?
     if (gyroCalibrating) {
-        updateGyroCalibration(gx, gy, gz);
-        return; // während Kalibrierung keine Events
+        updateGyroCalibration(gx, gy, gz, now);
+        return;
     }
+
 
     // 3. Noch nicht kalibriert → ignorieren
     if (!gyroCalibrated)
@@ -138,15 +139,15 @@ void MyControllerEx::processGyro(uint64_t now) {
     gy -= gyroBiasY;
     gz -= gyroBiasZ;
 
-    // 5. Deadzone
-    if (fabs(gx) < 1) gx = 0;
-    if (fabs(gy) < 1) gy = 0;
-    if (fabs(gz) < 1) gz = 0;
-
-    // 6. Low‑Pass
+    // 5. Low‑Pass
     filteredGX = filteredGX * 0.9f + gx * 0.1f;
     filteredGY = filteredGY * 0.9f + gy * 0.1f;
     filteredGZ = filteredGZ * 0.9f + gz * 0.1f;
+
+    // 6. Deadzone AUF DEM GEFILTERTEN WERT
+    if (fabs(filteredGX) < GYRO_DEADZONE) filteredGX = 0;
+    if (fabs(filteredGY) < GYRO_DEADZONE) filteredGY = 0;
+    if (fabs(filteredGZ) < GYRO_DEADZONE) filteredGZ = 0;
 
     // 7. Threshold
     if (fabs(filteredGX - prevGX) < 0.5f &&
@@ -217,9 +218,11 @@ void MyControllerEx::startGyroCalibration() {
 
     gyroCalibCount = 0;
     gyroSumX = gyroSumY = gyroSumZ = 0;
+
+    gyroCalibStart = esp_timer_get_time();   // Startzeit merken
 }
 
-bool MyControllerEx::updateGyroCalibration(float gx, float gy, float gz) {
+bool MyControllerEx::updateGyroCalibration(float gx, float gy, float gz, uint64_t now) {
     if (!gyroCalibrating)
         return false;
 
@@ -228,18 +231,21 @@ bool MyControllerEx::updateGyroCalibration(float gx, float gy, float gz) {
     gyroSumZ += gz;
     gyroCalibCount++;
 
-    if (gyroCalibCount >= GYRO_CALIB_SAMPLES) {
-        gyroBiasX = gyroSumX / gyroCalibCount;
-        gyroBiasY = gyroSumY / gyroCalibCount;
-        gyroBiasZ = gyroSumZ / gyroCalibCount;
+    // mindestens 2 Sekunden sammeln
+    if (now - gyroCalibStart < 2'000'000)
+        return false;
 
-        gyroCalibrating = false;
-        gyroCalibrated = true;
-        return true;
-    }
+    // Bias berechnen
+    gyroBiasX = gyroSumX / gyroCalibCount;
+    gyroBiasY = gyroSumY / gyroCalibCount;
+    gyroBiasZ = gyroSumZ / gyroCalibCount;
 
-    return false;
+    gyroCalibrating = false;
+    gyroCalibrated = true;
+
+    return true;
 }
+
 
 
 

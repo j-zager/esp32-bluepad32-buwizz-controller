@@ -15,6 +15,9 @@ public:
     static constexpr float LONG_PRESS_THRESHOLD = 0.5f;     // Sekunden
     static constexpr float DOUBLE_PRESS_THRESHOLD = 0.25f;  // Sekunden
 
+    static constexpr float GYRO_DEADZONE = 6.0f;
+
+
     MyControllerEx();
 
     // neuen Gamepad-Status setzen (kopiert von Bluepad32)
@@ -50,7 +53,7 @@ public:
     void processAccel(uint64_t now);
 
     void startGyroCalibration();
-    bool updateGyroCalibration(float gx, float gy, float gz);
+    bool updateGyroCalibration(float gx, float gy, float gz, uint64_t now);
 
 
     // Debug-Ausgabe
@@ -85,6 +88,7 @@ protected:
     bool gyroCalibrating = false;
 
     static constexpr int GYRO_CALIB_SAMPLES = 500;
+    uint64_t gyroCalibStart = 0;
     int gyroCalibCount = 0;
 
     float gyroBiasX = 0;
