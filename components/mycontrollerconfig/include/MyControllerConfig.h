@@ -40,6 +40,7 @@ public:
 private:
     uni_hid_device_t* device = nullptr;
      int battery = -1;   // 0–100
+     uint64_t lastBatteryUpdate = 0;
 };
 
 #endif

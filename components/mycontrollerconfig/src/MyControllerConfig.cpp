@@ -5,6 +5,8 @@ extern "C" {
 #include "esp_timer.h"
 #include "driver/gpio.h"
 }
+#include "slot_helpers.h"
+
 
 static const char* TAG = "MyControllerConfig";
 
@@ -49,6 +51,7 @@ void MyControllerConfig::reset() {
         buttonTimes[i] = 0;
         lastPressTime[i] = 0;
     }
+    lastBatteryUpdate = 0;
 }
 
 bool MyControllerConfig::hasGpActive() const {
@@ -80,9 +83,8 @@ int MyControllerConfig::getBattery() const {
 }
 
 void MyControllerConfig::updateBatteryLED(uint64_t now) {
-    static uint64_t lastUpdate = 0;
-    if (now - lastUpdate < 5000000) return; // alle 5s
-    lastUpdate = now;
+    if (now - lastBatteryUpdate < 5000000) return; // alle 5s
+    lastBatteryUpdate = now;
 
     int bat = getBattery();
     if (bat < 0) return;
@@ -116,8 +118,9 @@ void MyControllerConfig::updateBatteryLED(uint64_t now) {
 }
 
 void MyControllerConfig::onPress(const char* name) {
-    ESP_LOGI(TAG, "[PRESS] %s", name);
-
+    //ESP_LOGI(TAG, "[PRESS] %s", name);
+    int slot = findSlotForDevice(device);
+    ESP_LOGI(TAG, "[PRESS] slot=%d  %s", slot, name);
 
     if (strcmp(name, "up") == 0)
         setColor(0, 255, 0);

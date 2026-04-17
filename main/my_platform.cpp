@@ -15,21 +15,20 @@ extern "C" {
 
 #include <uni.h>
 
-
 #include "MyControllerConfig.h"
+#include "slot_helpers.h"
+
+
 
 // Maximal 4 Controller
 static MyControllerConfig controllers[4];
-
-// Zuordnung: welcher Slot gehört welchem Device?
-static uni_hid_device_t* deviceForSlot[4] = { nullptr };
 
 
 
 void myMainTask(void* p);
 static void initPins();
-static int findFreeSlot();
-static int findSlotForDevice(uni_hid_device_t* d);
+// int findFreeSlot();
+// int findSlotForDevice(uni_hid_device_t* d);
 
 // Custom "instance"
 typedef struct my_platform_instance_s {
@@ -307,18 +306,18 @@ static void initPins() {
     gpio_set_level(LED_PIN, 0);   // LED aus
 }
 
-static int findFreeSlot() {
-    for (int i = 0; i < 4; i++) {
-        if (deviceForSlot[i] == nullptr)
-            return i;
-    }
-    return -1;
-}
+// int findFreeSlot() {
+//     for (int i = 0; i < 4; i++) {
+//         if (deviceForSlot[i] == nullptr)
+//             return i;
+//     }
+//     return -1;
+// }
 
-static int findSlotForDevice(uni_hid_device_t* d) {
-    for (int i = 0; i < 4; i++) {
-        if (deviceForSlot[i] == d)
-            return i;
-    }
-    return -1;
-}
+// int findSlotForDevice(uni_hid_device_t* d) {
+//     for (int i = 0; i < 4; i++) {
+//         if (deviceForSlot[i] == d)
+//             return i;
+//     }
+//     return -1;
+// }
