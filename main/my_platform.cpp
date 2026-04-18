@@ -280,6 +280,7 @@ void myMainTask(void* p) {
     static bool mode_sent = false;
     static bool test_motors_sent = false;
     static uint64_t connection_timestamp = 0;
+    static uint64_t last_battery_check = 0;
 
     while (1) {
         uint64_t now = esp_timer_get_time();
@@ -300,6 +301,7 @@ void myMainTask(void* p) {
         eventManager.process();
 
         buwizz.process();
+
         if (!buwizz_started && (now - buwizz_start_time > 1500000)) {
             buwizz.connect();
             buwizz_started = true;
@@ -329,6 +331,12 @@ void myMainTask(void* p) {
             mode_sent = false;
             test_motors_sent = false;
         }
+
+        if (buwizz.isConnected() && (now - last_battery_check > 5000000)) {
+            buwizz.requestBattery();
+            last_battery_check = now;
+        }
+
 
         // CPU freigeben (wichtig!)
         vTaskDelay(1);
