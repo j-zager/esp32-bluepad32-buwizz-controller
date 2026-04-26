@@ -24,8 +24,22 @@ extern "C" {
 
 extern MyControllerConfig controllers[4];
 extern ControllerEventManager eventManager;
-// HIER wird das Objekt physikalisch erzeugt
-BuWizz buwizz;
+// // HIER wird das Objekt physikalisch erzeugt
+// BuWizz buwizz;
+
+// Definition der Adressen
+static bd_addr_t BuWizz_ADDR1 = {0x50, 0xFA, 0xAB, 0x6D, 0x03, 0x4C};
+static bd_addr_t BuWizz_ADDR2  = {0x50, 0xFA, 0xAB, 0x6D, 0x51, 0xDE}; // Beispiel
+
+// Die Objekte werden mit den Adressen erstellt
+BuWizz bwz1(BuWizz_ADDR1);
+BuWizz bwz2(BuWizz_ADDR2);
+
+// Wir machen sie in einem Array für den Handler zugänglich (in buwizz.cpp oder platform.cpp)
+BuWizz* mulBuWizz[] = { &bwz1, &bwz2 };
+// const int NUM_BRICKS = 2;
+const int NUM_BRICKS = sizeof(mulBuWizz) / sizeof(mulBuWizz[0]);
+
 
 void myMainTask(void* p);
 static void initPins();
@@ -88,7 +102,11 @@ static void my_platform_on_init_complete(void) {
     // Deine Task starten
     xTaskCreate(myMainTask, "my_task", 4096, NULL, 5, NULL);
 
-    buwizz.init();// eventuell vor xtaskCreate fürs timing.
+    // buwizz.init();// eventuell vor xtaskCreate fürs timing.
+
+    for (int i = 0; i < NUM_BRICKS; i++) {
+        mulBuWizz[i]->init();
+    }
 
 
 }
@@ -274,17 +292,34 @@ extern "C" struct uni_platform* get_my_platform(void) {
 
 void myMainTask(void* p) {
     uint64_t last = esp_timer_get_time(); // µs
-    static bool buwizz_started = false;
-    static uint64_t buwizz_start_time = esp_timer_get_time();
+    // static bool buwizz_started = false;
+    // static uint64_t buwizz_start_time = esp_timer_get_time();
     // In myMainTask
-    static bool mode_sent = false;
-    static bool test_motors_sent = false;
-    static uint64_t connection_timestamp = 0;
-    static uint64_t last_battery_check = 0;
+    // static bool mode_sent = false;
+    // static bool test_motors_sent = false;
+    // static uint64_t connection_timestamp = 0;
+    // static uint64_t last_battery_check = 0;
+
+    // static bool buwizz_started[NUM_BRICKS] = {false};
+    // static uint64_t buwizz_start_time[NUM_BRICKS] = {0};
+
+    // static bool mode_sent[NUM_BRICKS] = {false};
+    // static bool test_motors_sent[NUM_BRICKS] = {false};
+    // static uint64_t connection_timestamp[NUM_BRICKS] = {0};
+    // static uint64_t last_battery_check[NUM_BRICKS] = {0};
+
+    // for (int i = 0; i < NUM_BRICKS; i++) {
+    //     buwizz_start_time[i] = esp_timer_get_time();
+    // }
+
+
 
     while (1) {
         uint64_t now = esp_timer_get_time();
 
+        // -----------------------------
+        // MULTI-Controller HANDLING
+        // -----------------------------
         // alle 10 ms
         if (now - last > 10000) {
             last = now;
@@ -299,43 +334,99 @@ void myMainTask(void* p) {
         }
 
         eventManager.process();
+        // -----------------------------
+        // MULTI-BUWIZZ HANDLING
+        // -----------------------------
 
-        buwizz.process();
-
-        if (!buwizz_started && (now - buwizz_start_time > 1500000)) {
-            buwizz.connect();
-            buwizz_started = true;
-        }
-        // 1. Verbindung prüfen
-        if (buwizz.isConnected()) {
-            // Wir merken uns, wann die Verbindung STABIL wurde
-            if (connection_timestamp == 0) connection_timestamp = now;
-
-            // 2. Nach 2 Sekunden Verbindung: Modus setzen
-            if (!mode_sent && (now - connection_timestamp > 2000000)) {
-                printf("Main: Sende Fast Mode...\n");
-                buwizz.setMode(3);
-                mode_sent = true;
-            }
-
-            // 3. Nach 4 Sekunden Verbindung: Kurzer Motor-Test
-            if (mode_sent && !test_motors_sent && (now - connection_timestamp > 4000000)) {
-                printf("Main: Sende Motor-Test-Befehl...\n");
-                buwizz.setMotors(120, 120, 120, 120);
-                test_motors_sent = true;
-            }
-
-        } else {
-            // Reset, falls die Verbindung abbricht
-            connection_timestamp = 0;
-            mode_sent = false;
-            test_motors_sent = false;
+        // BUWIZZ LOGIK: Ein Einzeiler pro Stein!
+        for (int b = 0; b < NUM_BRICKS; b++) {
+            mulBuWizz[b]->update(now); 
         }
 
-        if (buwizz.isConnected() && (now - last_battery_check > 5000000)) {
-            buwizz.requestBattery();
-            last_battery_check = now;
-        }
+        // for (int b = 0; b < NUM_BRICKS; b++) {
+
+        //     // State-Machine der BuWizz-Klasse
+        //     mulBuWizz[b]->process();
+
+        //     // 1. Startverzögerung (1.5s)
+        //     if (!buwizz_started[b] && (now - buwizz_start_time[b] > 1500000)) {
+        //         mulBuWizz[b]->connect();
+        //         buwizz_started[b] = true;
+        //     }
+
+        //     // 2. Verbindung prüfen
+        //     if (mulBuWizz[b]->isConnected()) {
+
+        //         // Verbindung stabil → Timestamp setzen
+        //         if (connection_timestamp[b] == 0) connection_timestamp[b] = now;
+
+        //         // 3. Nach 2 Sekunden: Fast Mode setzen
+        //         if (!mode_sent[b] && (now - connection_timestamp[b] > 2000000)) {
+        //             printf("BuWizz[%d]: Sende Fast Mode...\n", b);
+        //             mulBuWizz[b]->setMode(3);
+        //             mode_sent[b] = true;
+        //         }
+
+        //         // 4. Nach 4 Sekunden: Motor-Test
+        //         if (mode_sent[b] && !test_motors_sent[b] &&
+        //             (now - connection_timestamp[b] > 4000000)) {
+
+        //             printf("BuWizz[%d]: Sende Motor-Test...\n", b);
+        //             mulBuWizz[b]->setMotors(120, 120, 120, 120);
+        //             test_motors_sent[b] = true;
+        //         }
+
+        //         // 5. Alle 5 Sekunden: Batterie abfragen
+        //         if (now - last_battery_check[b] > 5000000) {
+        //             mulBuWizz[b]->requestBattery();
+        //             last_battery_check[b] = now;
+        //         }
+
+        //     } else {
+        //         // Reset bei Disconnect
+        //         connection_timestamp[b] = 0;
+        //         mode_sent[b] = false;
+        //         test_motors_sent[b] = false;
+        //     }
+        // }
+
+
+        // buwizz.process();
+
+        // if (!buwizz_started && (now - buwizz_start_time > 1500000)) {
+        //     buwizz.connect();
+        //     buwizz_started = true;
+        // }
+        // // 1. Verbindung prüfen
+        // if (buwizz.isConnected()) {
+        //     // Wir merken uns, wann die Verbindung STABIL wurde
+        //     if (connection_timestamp == 0) connection_timestamp = now;
+
+        //     // 2. Nach 2 Sekunden Verbindung: Modus setzen
+        //     if (!mode_sent && (now - connection_timestamp > 2000000)) {
+        //         printf("Main: Sende Fast Mode...\n");
+        //         buwizz.setMode(3);
+        //         mode_sent = true;
+        //     }
+
+        //     // 3. Nach 4 Sekunden Verbindung: Kurzer Motor-Test
+        //     if (mode_sent && !test_motors_sent && (now - connection_timestamp > 4000000)) {
+        //         printf("Main: Sende Motor-Test-Befehl...\n");
+        //         buwizz.setMotors(120, 120, 120, 120);
+        //         test_motors_sent = true;
+        //     }
+
+        // } else {
+        //     // Reset, falls die Verbindung abbricht
+        //     connection_timestamp = 0;
+        //     mode_sent = false;
+        //     test_motors_sent = false;
+        // }
+
+        // if (buwizz.isConnected() && (now - last_battery_check > 5000000)) {
+        //     buwizz.requestBattery();
+        //     last_battery_check = now;
+        // }
 
 
         // CPU freigeben (wichtig!)
