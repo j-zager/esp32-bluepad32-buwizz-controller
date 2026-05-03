@@ -45,7 +45,7 @@ void BuWizz::init() {
 
 void BuWizz::connect() {
     if (_connected) return;
-    printf("BuWizz: Starte Suche nach BuWizz Stein...\n"); 
+    printf("[DEBUG][Connect]BuWizz: Starte Suche nach BuWizz Stein...\n"); 
     uni_bt_le_scan_start();
 }
 
@@ -55,13 +55,13 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
     uint8_t event = hci_event_packet_get_type(packet);
     BuWizz* current = nullptr;
 
-        // --- DEBUG: JEDES HCI PAKET ANZEIGEN ---
-    if (event == HCI_EVENT_LE_META) {
-        uint8_t sub = hci_event_le_meta_get_subevent_code(packet);
-        printf("[DEBUG] LE_META Sub: 0x%02X empfangen\n", sub);
-    } else {
-        printf("[DEBUG] HCI Event: 0x%02X empfangen\n", event);
-    }
+    //     // --- DEBUG: JEDES HCI PAKET ANZEIGEN ---
+    // if (event == HCI_EVENT_LE_META) {
+    //     uint8_t sub = hci_event_le_meta_get_subevent_code(packet);
+    //     // printf("[DEBUG] LE_META Sub: 0x%02X empfangen\n", sub);
+    // } else {
+    //     // printf("[DEBUG] HCI Event: 0x%02X empfangen\n", event);
+    // }
 
     // --- 1. WER IST DER ABSENDER? ---
     if (event == HCI_EVENT_LE_META) {
@@ -76,7 +76,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     break; 
                 }
             }
-        } else { // CONNECT: Nimm das erste freie Objekt
+        } else { // CONNECT: Nimm das erste freie Objekt (0x01/0x0a)
             uint16_t h = little_endian_read_16(packet, 4);
             printf("[DEBUG] Connect-Paket mit Handle 0x%04X\n", h);
             for (int i = 0; i < NUM_BRICKS; i++) {
@@ -100,7 +100,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
         }
     }
     if (!current) {
-        printf("[WARN] Paket konnte keinem Stein zugeordnet werden! (Event 0x%02X)\n", event);
+        // printf("[WARN] Paket konnte keinem Stein zugeordnet werden! (Event 0x%02X)\n", event);
         return;
     }
 
@@ -112,13 +112,14 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             // SCHRITT 1: BuWizz im Scan finden
             if (subevent == HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
                  // Wir verbinden nur, wenn dieser Stein noch nicht verbunden ist
-                if (!current->_connected && current->_con_handle == HCI_CON_HANDLE_INVALID) {
+                // if (!current->_connected && current->_con_handle == HCI_CON_HANDLE_INVALID) {
+                if (!current->_connected && !current->_connect_triggered) {
                     printf("Scan - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                         current->_addr[0], current->_addr[1], current->_addr[2], 
                         current->_addr[3], current->_addr[4], current->_addr[5]);
-                    printf("BuWizz: Gefunden! Verbinde...\n");
-
-                    // WICHTIG: Scan NICHT stoppen, wenn wir noch weitere Steine suchen!
+                    printf("[INFO] BuWizz: Gefunden! Verbinde...\n");
+                    current->_connect_triggered = true;
+                    uni_bt_le_scan_stop();
                     gap_connect(current->_addr, (bd_addr_type_t)packet[5]);
                 }
             }
@@ -129,21 +130,22 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     current->_con_handle = little_endian_read_16(packet, 4);
                     current->_connected = true;
                     // printf("BuWizz [0x%04x]: ✔ Verbunden!\n", current->_con_handle);
-                    printf("Connected - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+                    printf("[INFO] Connected - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                         current->_addr[0], current->_addr[1], current->_addr[2], 
                         current->_addr[3], current->_addr[4], current->_addr[5]);
                     printf("BuWizz: ✔ Verbunden!-KONSTANT GRÜN! Handle: 0x%04x.\n", current->_con_handle);
 
-                    // INTELLIGENTER SCAN-STOP:
-                    // Wir prüfen, ob ALLE Steine aus mulBuWizz jetzt verbunden sind
-                    bool all_connected = true;
+                    // --- WICHTIG: Scan sofort wieder an für den nächsten Stein ---
+                    bool anyone_missing = false;
                     for (int i = 0; i < NUM_BRICKS; i++) {
-                        if (!mulBuWizz[i]->_connected) all_connected = false;
+                        if (!mulBuWizz[i]->_connected) anyone_missing = true;
                     }
-                    if (all_connected) {
-                        printf("BuWizz: Alle Steine verbunden. Scan stoppt.\n");
-                        uni_bt_le_scan_stop();
+                    
+                    if (anyone_missing) {
+                        printf("BuWizz: Starte Scan neu für weitere Steine...\n");
+                        uni_bt_le_scan_start();
                     }
+                    
                     // Sofortige Service-Suche (UUID128 vorwärts)
                     gatt_client_discover_primary_services_by_uuid128(
                         &BuWizz::packetHandler, current->_con_handle, BUWIZZ_SERVICE_UUID128);
@@ -153,7 +155,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
         case GATT_EVENT_SERVICE_QUERY_RESULT:
             // Wir speichern den Service nur zwischen!
-            printf("GATT_EVENT_SERVICE_QUERY_RESULT - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+            printf("[DEBUG] [GATT_EVENT_SERVICE_QUERY_RESULT] - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                 current->_addr[0], current->_addr[1], current->_addr[2], 
                 current->_addr[3], current->_addr[4], current->_addr[5]);
             gatt_event_service_query_result_get_service(packet, &current->buwizz_service);
@@ -163,21 +165,41 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
         // 4. EINE SUCHE IST ABGESCHLOSSEN (Die Brücke)
         case GATT_EVENT_QUERY_COMPLETE:
-            printf("GATT_EVENT_QUERY_COMPLETE - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+            printf("[DEBUG] [GATT_EVENT_QUERY_COMPLETE] - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                 current->_addr[0], current->_addr[1], current->_addr[2], 
                 current->_addr[3], current->_addr[4], current->_addr[5]);
 
+            // PHASE 1: Service-Suche beendet, starte Characteristic-Suche
             if (current->service_found && current->_motor_handle == 0) {
                 printf("BuWizz: Service-Suche fertig. Suche jetzt Characteristics...\n");
                 gatt_client_discover_characteristics_for_service_by_uuid16(
                     &BuWizz::packetHandler, current->_con_handle, &current->buwizz_service, BUWIZZ_CHAR_UUID16);
                 current->service_found = false;
             }
+            // PHASE 2: Characteristic-Suche beendet (Motor-Handle ist nun bekannt)
+            else if (current->_motor_handle != 0) {
+                printf("BuWizz [0x%04X]: Discovery vollständig abgeschlossen.\n", current->_con_handle);
+                
+                // --- INTELLIGENTER SCAN-STOP ---
+                bool all_bricks_ready = true;
+                for (int i = 0; i < NUM_BRICKS; i++) {
+                    // Ein Stein ist erst "ready", wenn er verbunden ist UND sein Motor-Handle (Zimmernummer) kennt
+                    if (!mulBuWizz[i]->_connected || mulBuWizz[i]->_motor_handle == 0) {
+                        all_bricks_ready = false;
+                        break;
+                    }
+                }
+
+                if (all_bricks_ready) {
+                    printf("[DEBUG] >>> Alle BuWizz-Steine fahrbereit! Stoppe Scan. <<<\n");
+                    //uni_bt_le_scan_stop();
+                }
+            }  
             break;
 
         // 5. CHARACTERISTIC GEFUNDEN
         case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT: {
-            printf("GATT_EVENT_CHARACTERISTIC_QUERY_RESULT - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+            printf("[DEBUG][GATT_EVENT_CHARACTERISTIC_QUERY_RESULT] - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                 current->_addr[0], current->_addr[1], current->_addr[2], 
                 current->_addr[3], current->_addr[4], current->_addr[5]);
 
@@ -187,6 +209,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             if (characteristic.uuid16 == BUWIZZ_CHAR_UUID16) {
                 current->_motor_handle = characteristic.value_handle;
                 printf("BuWizz [0x%04x]: ⭐ Handle 0x%04x\n", current->_con_handle, current->_motor_handle);
+                current->_char_found =true;
                 static uint16_t notify = 0x0001;
                 gatt_client_write_value_of_characteristic(
                     &BuWizz::packetHandler, current->_con_handle, 0x0005, 2, (uint8_t*)&notify);
@@ -211,6 +234,9 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             current->_connected = false;
             current->_motor_handle = 0;
             current->_con_handle = HCI_CON_HANDLE_INVALID;
+            current->_char_found =false;
+            current->_connect_triggered = false;
+            current->_mode_set = false;
             // Wenn alle getrennt sind, Scan wieder starten
             uni_bt_le_scan_start(); 
             break;
@@ -395,8 +421,8 @@ void BuWizz::setMotors(int8_t m1, int8_t m2, int8_t m3, int8_t m4) {
 
     uint8_t err = gatt_client_write_value_of_characteristic_without_response(
         _con_handle, _motor_handle, 6, _motor_payload);
-
-    if (err) printf("Stack-Status Motor Error: 0x%02x\n", err);
+    //Fehler 0x94 (Busy) siehst, ist das bei Bluetooth normal, wenn Pakete zu schnell kommen
+    if (err && err != 0x94) printf("Motor Error: 0x%02x\n", err);
 }
 
 void BuWizz::requestBattery() {
@@ -414,61 +440,218 @@ void BuWizz::requestBattery() {
 }
 
 
-void BuWizz::update(uint64_t now) {
-    // 1. Initialisierung des Start-Zeitpunkts beim allerersten Aufruf
+void BuWizz::triggerConnect(uint64_t now) {
     if (_init_time == 0) _init_time = now;
 
-    // 2. Verbindungsprozess starten (1.5s Verzögerung nach Systemstart)
-    if (!_connect_triggered) {
-        if (now - _init_time > 1500000) {
-            this->connect();
-            _connect_triggered = true;
-        }
-        return; // Wartezeit noch nicht um
-    }
-
-    // 3. Falls (noch) nicht verbunden: Timer zurücksetzen und abbrechen
+    // A) Wenn nicht verbunden: Alles zurücksetzen und warten
     if (!_connected) {
         _connected_at = 0;
         _mode_set = false;
-        _test_drive_done = false;
-        return;
+        return; 
     }
 
-    // 4. Ab hier: Stein ist verbunden. Wir merken uns den Moment der stabilen Verbindung
-    if (_connected_at == 0) {
-        _connected_at = now;
-        _last_battery_request = now; // Ersten Akku-Request verzögern
-    }
+    // B) Ab hier: Verbindung steht
+    if (_connected_at == 0) _connected_at = now;
 
-    // 5. Nach 2 Sekunden Verbindung: Power Mode setzen (Fast Mode = 3)
-    if (!_mode_set && (now - _connected_at > 2000000)) {
-        printf("BuWizz [0x%04X]: Setze Fast Mode (automatisch)...\n", _con_handle);
-        this->setMode(3);
-        _mode_set = true;
-    }
-
-    // 6. Nach 4 Sekunden Verbindung: Kurzer Motor-Testlauf
-    if (_mode_set && !_test_drive_done && (now - _connected_at > 4000000)) {
-        printf("BuWizz [0x%04X]: Starte Motor-Testlauf...\n", _con_handle);
-        this->setMotors(120, 120, 120, 120);
-        _test_drive_done = true;
-    }
-
-    // 7. Alle 5 Sekunden: Batterie-Status anfordern
-    if (now - _last_battery_request > 5000000) {
-        this->requestBattery();
-        _last_battery_request = now;
+    // C) Einmaliges Scharfschalten (Modus 3)
+    // Nur wenn Discovery fertig (Stern ⭐ da) und Modus noch nicht gesetzt
+    if (!_mode_set && _motor_handle != 0) {
+        // Wir geben dem Stein nach dem "Stern" 500ms Zeit zum Atmen
+        if (now - _connected_at > 500000) {
+            this->setMode(3); 
+            _mode_set = true;
+            printf("BuWizz [0x%04X]: Setup fertig (Modus 3).\n", _con_handle);
+        }
     }
 }
 
+// void BuWizz::update(uint64_t now) {
+//     if (_init_time == 0) _init_time = now;
+
+//     // A) Wenn nicht verbunden: Alles zurücksetzen und warten
+//     if (!_connected) {
+//         _connected_at = 0;
+//         _mode_set = false;
+//         return; 
+//     }
+
+//     // B) Ab hier: Verbindung steht
+//     if (_connected_at == 0) _connected_at = now;
+
+//     // C) Einmaliges Scharfschalten (Modus 3)
+//     // Nur wenn Discovery fertig (Stern ⭐ da) und Modus noch nicht gesetzt
+//     if (!_mode_set && _motor_handle != 0) {
+//         // Wir geben dem Stein nach dem "Stern" 500ms Zeit zum Atmen
+//         if (now - _connected_at > 500000) {
+//             this->setMode(3); 
+//             _mode_set = true;
+//             printf("BuWizz [0x%04X]: Setup fertig (Modus 3).\n", _con_handle);
+//         }
+//     }
+// }
+
+
+// void BuWizz::update(uint64_t now) {
+//     if (_init_time == 0) _init_time = now;
+
+//     // 1. Verbindung herstellen / Wiederherstellen
+//     if (!_connected) {
+//         // Reset der fahr-spezifischen Timer
+//         _connected_at = 0;
+//         _mode_set = false;
+
+//         // Nur alle 2 Sekunden einen Scan-Start-Versuch unternehmen, 
+//         // um den Bluetooth-Stack nicht zu überlasten
+//         static uint64_t last_connect_attempt = 0;
+//         if (now - _init_time > 1500000 && now - last_connect_attempt > 3000000) {
+//             printf("BuWizz [%02X...]: Suche Verbindung...\n", _addr[0]);
+//             this->connect();
+//             last_connect_attempt = now;
+//         }
+//         return; // Warten auf Verbindung
+//     }
+
+//     // 2. Ab hier: Verbunden!
+//     if (_connected_at == 0) {
+//         _connected_at = now;
+//     }
+
+//         // 2. EINMALIGES SETUP: Mode setzen (nur wenn Discovery fertig)
+//     if (!_mode_set && (_motor_handle != 0)) {
+//         // Wir geben dem Ganzen 500ms nach der Discovery Zeit
+//         static uint64_t last_mode_attempt = 0;
+//         if (now - last_mode_attempt > 500000) {
+//             printf("BuWizz [0x%04X]: Initialisiere Mode 3...\n", _con_handle);
+//             this->setMode(3);
+//             _mode_set = true; // Markiert den Stein als "Setup fertig"
+//             last_mode_attempt = now;
+//         }
+//     }
+
+
+// }
+
+// void BuWizz::update(uint64_t now) {
+//     if (_init_time == 0) _init_time = now;
+
+//     // 1. Verbindung herstellen / Wiederherstellen
+//     if (!_connected) {
+//         // Reset der fahr-spezifischen Timer
+//         _connected_at = 0;
+//         _mode_set = false;
+//         _test_drive_done = false;
+
+//         // Nur alle 2 Sekunden einen Scan-Start-Versuch unternehmen, 
+//         // um den Bluetooth-Stack nicht zu überlasten
+//         static uint64_t last_connect_attempt = 0;
+//         if (now - _init_time > 1500000 && now - last_connect_attempt > 2000000) {
+//             printf("BuWizz [%02X...]: Suche Verbindung...\n", _addr[0]);
+//             this->connect();
+//             last_connect_attempt = now;
+//         }
+//         return; // Warten auf Verbindung
+//     }
+
+//     // 2. Ab hier: Verbunden!
+//     if (_connected_at == 0) {
+//         _connected_at = now;
+//         _last_battery_request = now;
+//     }
+
+//     // 3. Power Mode (nach 2s)
+//     if (!_mode_set && (now - _connected_at > 2000000)) {
+//         if (this->getMotorHandle() != 0) { // Erst wenn Discovery fertig!
+//             this->setMode(3);
+//             _mode_set = true;
+//         }
+//     }
+
+
+//     // 4. Nach 4 Sekunden Verbindung: Kurzer Motor-Testlauf
+//     if (_mode_set && !_test_drive_done && (now - _connected_at > 4000000)) {
+//         printf("BuWizz [0x%04X]: Starte Motor-Testlauf...\n", _con_handle);
+//         this->setMotors(120, 120, 120, 120);
+//         _test_drive_done = true;
+//     }
+
+//     // 5. Alle 5 Sekunden: Batterie-Status anfordern
+//     if (now - _last_battery_request > 5000000) {
+//         this->requestBattery();
+//         _last_battery_request = now;
+//     }
+// }
+
+
+// void BuWizz::update(uint64_t now) {
+//     // 1. Initialisierung des Start-Zeitpunkts beim allerersten Aufruf
+//     if (_init_time == 0) _init_time = now;
+
+//     // 2. Verbindungsprozess starten (1.5s Verzögerung nach Systemstart)
+//     if (!_connect_triggered) {
+//         if (now - _init_time > 1500000) {
+//             this->connect();
+//             _connect_triggered = true;
+//         }
+//         return; // Wartezeit noch nicht um
+//     }
+
+//     // 3. Falls (noch) nicht verbunden: Timer zurücksetzen und abbrechen
+//     if (!_connected) {
+//         _connected_at = 0;
+//         _mode_set = false;
+//         _test_drive_done = false;
+//         return;
+//     }
+
+//     // 4. Ab hier: Stein ist verbunden. Wir merken uns den Moment der stabilen Verbindung
+//     if (_connected_at == 0) {
+//         _connected_at = now;
+//         _last_battery_request = now; // Ersten Akku-Request verzögern
+//     }
+
+//     // 5. Nach 2 Sekunden Verbindung: Power Mode setzen (Fast Mode = 3)
+//     if (!_mode_set && (now - _connected_at > 2000000)) {
+//         printf("BuWizz [0x%04X]: Setze Fast Mode (automatisch)...\n", _con_handle);
+//         this->setMode(3);
+//         _mode_set = true;
+//     }
+
+//     // 6. Nach 4 Sekunden Verbindung: Kurzer Motor-Testlauf
+//     if (_mode_set && !_test_drive_done && (now - _connected_at > 4000000)) {
+//         printf("BuWizz [0x%04X]: Starte Motor-Testlauf...\n", _con_handle);
+//         this->setMotors(120, 120, 120, 120);
+//         _test_drive_done = true;
+//     }
+
+//     // 7. Alle 5 Sekunden: Batterie-Status anfordern
+//     if (now - _last_battery_request > 5000000) {
+//         this->requestBattery();
+//         _last_battery_request = now;
+//     }
+// }
 
 
 
+uint16_t BuWizz::getMotorHandle() { 
+    return _motor_handle; 
+}
+
+bool BuWizz::isConnected() { 
+    return _connected; 
+}
+
+bool BuWizz::isConnectTriggered() { 
+    return _connect_triggered; 
+}
+
+bool BuWizz::isCharFound(){
+    return _char_found;
+}
 
 
-
-
+bool BuWizz::isReady() { 
+    return _connected && (_motor_handle != 0) && _mode_set; 
+    }
 
 
 

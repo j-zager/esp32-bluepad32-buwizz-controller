@@ -19,8 +19,13 @@ public:
     void setMode(uint8_t mode);
     void requestBattery();
     void update(uint64_t now);
+    void triggerConnect(uint64_t now);
     
-    bool isConnected() const { return _connected; }
+    bool isConnected();
+    bool isConnectTriggered(); 
+    bool isCharFound();
+    uint16_t getMotorHandle();
+    bool isReady();
 
     // Der Handler muss statisch sein für BTstack
     static void packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
@@ -46,7 +51,8 @@ private:
     uint64_t _connected_at = 0;        // Wann wurde die BT-Verbindung stabil
     uint64_t _last_battery_request = 0;// Wann wurde zuletzt der Akku abgefragt
     
-    bool _connect_triggered = false;   // Wurde connect() schon einmal gerufen
+    bool _connect_triggered = false;   // Wurde connect() schon einmal gerufen Wirkt als Sperre für gap_connect
+    bool _char_found =false;            // Wurde charcteristic gefunden, letzte step bevor verbindung komplett erfolgreich ist
     bool _mode_set = false;            // Wurde der Speed-Mode schon gesetzt
     bool _test_drive_done = false;     // Wurde der Motor-Test abgeschlossen
 };
