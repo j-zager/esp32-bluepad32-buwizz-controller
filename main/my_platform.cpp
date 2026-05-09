@@ -40,7 +40,7 @@ BuWizz bwz3(BuWizz_ADDR3);
 
 // Wir machen sie in einem Array für den Handler zugänglich (in buwizz.cpp oder platform.cpp)
 // BuWizz* mulBuWizz[] = { &bwz1, &bwz2 };
-BuWizz* mulBuWizz[] = { &bwz1 };
+BuWizz* mulBuWizz[] = { &bwz1, &bwz3 };
 // const int NUM_BRICKS = 2;
 const int NUM_BRICKS = sizeof(mulBuWizz) / sizeof(mulBuWizz[0]);
 
@@ -298,8 +298,9 @@ void myMainTask(void* p) {
     uint64_t last = esp_timer_get_time(); // µs
     static uint64_t last_scan_retry = 0;
     static bool missing = false;
-    static bool all_connected = false;
+    // static bool all_connected = false;
     static uint64_t last_motor_time = 0;
+    static bool all_ready = true;
 
     while (1) {
         uint64_t now = esp_timer_get_time();
@@ -328,21 +329,27 @@ void myMainTask(void* p) {
 
         // 1. Verbinde und Reverbinde Logik
         if (now - last_scan_retry > 4000000) { // Alle 4 Sekunden prüfen
-            all_connected = true;
+            // all_connected = true;
+            missing = false;
+            all_ready = true;
             for(int i=0; i<NUM_BRICKS; i++) {
                 // Falls jemand weder verbunden ist noch gerade versucht zu verbinden
                 if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->isConnectTriggered()) missing = true;
-                if(!mulBuWizz[i]->isConnected() || !mulBuWizz[i]->isConnectTriggered() 
-                        || !mulBuWizz[i]->isCharFound() || mulBuWizz[i]->getMotorHandle() == 0){
-                    all_connected = false;
-                } 
+                // if(!mulBuWizz[i]->isConnected() || !mulBuWizz[i]->isConnectTriggered() 
+                //         || !mulBuWizz[i]->isCharFound() || mulBuWizz[i]->getMotorHandle() == 0){
+                //     all_connected = false;
+                // } 
+                // Wer noch nicht fahrbereit ist (Discovery läuft noch)
+                if(!mulBuWizz[i]->isReady()) {
+                    all_ready = false;
+                }
             }
             if(missing) {
                 printf("Main: Jemand fehlt, starte Scan...\n");
                 uni_bt_le_scan_start();
                 missing = false;
             }
-            else{
+            else  if(all_ready){
                 printf("Main: Alle Steine verbunden stoppe Scan\n");
                 uni_bt_le_scan_stop();
             }
@@ -360,13 +367,14 @@ void myMainTask(void* p) {
         if (now - last_motor_time > 40000) {
             last_motor_time = now;
             for (int b = 0; b < NUM_BRICKS; b++) {
-                if (all_connected) {
-                    printf("MotorId:%d auf 60 setzen",b);
+                // if (all_connected) {
+                if (all_ready) {
+                    // printf("MotorId:%d auf 60 setzen",b);
                     mulBuWizz[b]->setMotors(60, 60, 60, 60);
                 } else {
                     // Nur Nullen senden, wenn der Stein überhaupt verbunden ist
                     if (mulBuWizz[b]->isConnected()) {
-                        printf("MotorId:%d auf 0 zur Sicherheit setzen",b);
+                        // printf("MotorId:%d auf 0 zur Sicherheit setzen",b);
                         mulBuWizz[b]->setMotors(0, 0, 0, 0); 
                     }
                 }
