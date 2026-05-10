@@ -315,7 +315,7 @@ void myMainTask(void* p) {
     if (step_interval < MIN_GAP_TIME) step_interval = MIN_GAP_TIME;
 
     // Motoren test
-    for (int bu = 0; bu < 4; bu++) {
+    for (int bu = 0; bu < NUM_BRICKS; bu++) {
         mulBuWizz[bu]->saveMotorAll(60,60,60,60,0);
     }
 
