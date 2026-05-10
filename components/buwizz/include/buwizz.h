@@ -7,6 +7,7 @@ extern "C" {
     #include "btstack.h"
     #include "gatt_client.h"
     #include "bt/uni_bt_le.h"
+    #include "esp_timer.h"
 }
 
 class BuWizz {
@@ -18,15 +19,16 @@ public:
     void setMotors(int8_t m1, int8_t m2, int8_t m3, int8_t m4);
     void setMode(uint8_t mode);
     void requestBattery();
-    void update(uint64_t now);
+    // void update(uint64_t now);
     void triggerConnect(uint64_t now);
     
     bool isConnected();
     bool isConnectTriggered(); 
     bool isCharFound();
     uint16_t getMotorHandle();
+    hci_con_handle_t getConnectHandle();
     bool isReady();
-
+    uint8_t getAddr(int id);
     // Der Handler muss statisch sein für BTstack
     static void packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
@@ -55,6 +57,7 @@ private:
     bool _char_found =false;            // Wurde charcteristic gefunden, letzte step bevor verbindung komplett erfolgreich ist
     bool _mode_set = false;            // Wurde der Speed-Mode schon gesetzt
     bool _test_drive_done = false;     // Wurde der Motor-Test abgeschlossen
+    uint32_t _mode_counter = 0;
 };
 
 // Das macht das Objekt für alle Dateien (platform.cpp, main.cpp etc.) sichtbar

@@ -40,7 +40,7 @@ BuWizz bwz3(BuWizz_ADDR3);
 
 // Wir machen sie in einem Array für den Handler zugänglich (in buwizz.cpp oder platform.cpp)
 // BuWizz* mulBuWizz[] = { &bwz1, &bwz2 };
-BuWizz* mulBuWizz[] = { &bwz1, &bwz3 };
+BuWizz* mulBuWizz[] = { &bwz2, &bwz1 };
 // const int NUM_BRICKS = 2;
 const int NUM_BRICKS = sizeof(mulBuWizz) / sizeof(mulBuWizz[0]);
 
@@ -299,8 +299,20 @@ void myMainTask(void* p) {
     static uint64_t last_scan_retry = 0;
     static bool missing = false;
     // static bool all_connected = false;
-    static uint64_t last_motor_time = 0;
     static bool all_ready = true;
+
+    // Statische Variablen für das Timing
+    static uint64_t last_scheduler_tick = 0;
+    int current_brick_idx = 0;
+
+    // --- KONFIGURATION ---
+    const uint64_t TARGET_CYCLE_TIME = 40000; // Ziel: Jeder Stein alle 40ms (25Hz)
+    const uint64_t MIN_GAP_TIME = 50000;      // Sicherheit: Min. 10ms zwischen zwei Paketen
+
+    // Dynamische Berechnung des Sende-Intervalls
+    // Wir nehmen entweder die geteilte Zeit ODER die Mindestpause (je nachdem, was größer ist)
+    uint64_t step_interval = TARGET_CYCLE_TIME / NUM_BRICKS;
+    if (step_interval < MIN_GAP_TIME) step_interval = MIN_GAP_TIME;
 
     while (1) {
         uint64_t now = esp_timer_get_time();
@@ -331,7 +343,7 @@ void myMainTask(void* p) {
         if (now - last_scan_retry > 4000000) { // Alle 4 Sekunden prüfen
             // all_connected = true;
             missing = false;
-            all_ready = true;
+             all_ready = true;
             for(int i=0; i<NUM_BRICKS; i++) {
                 // Falls jemand weder verbunden ist noch gerade versucht zu verbinden
                 if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->isConnectTriggered()) missing = true;
@@ -351,6 +363,9 @@ void myMainTask(void* p) {
             }
             else  if(all_ready){
                 printf("Main: Alle Steine verbunden stoppe Scan\n");
+                for (int idx = 0; idx < NUM_BRICKS; idx++) {
+                    printf("loop Id:%d Buwizz id: 0x%02X motor handle 0x%04X\n ",idx,mulBuWizz[idx]->getAddr(5), mulBuWizz[idx]->getConnectHandle());
+                }
                 uni_bt_le_scan_stop();
             }
 
@@ -363,202 +378,43 @@ void myMainTask(void* p) {
         }
 
 
-        // 3. MOTOR-BEFEHLE gedrosselt auf 40ms (25 Hz)
-        if (now - last_motor_time > 40000) {
-            last_motor_time = now;
-            for (int b = 0; b < NUM_BRICKS; b++) {
-                // if (all_connected) {
-                if (all_ready) {
-                    // printf("MotorId:%d auf 60 setzen",b);
-                    mulBuWizz[b]->setMotors(60, 60, 60, 60);
-                } else {
-                    // Nur Nullen senden, wenn der Stein überhaupt verbunden ist
-                    if (mulBuWizz[b]->isConnected()) {
-                        // printf("MotorId:%d auf 0 zur Sicherheit setzen",b);
-                        mulBuWizz[b]->setMotors(0, 0, 0, 0); 
-                    }
-                }
+        // --- 3. ECHTZEIT-PRÜFUNG DER FLOTTE (Jeden Loop-Durchgang!) ---
+        // Das hier darf NICHT im 4-Sekunden-Block stehen
+        all_ready = true;
+        for(int i=0; i<NUM_BRICKS; i++) {
+            if(!mulBuWizz[i]->isReady()) {
+                all_ready = false;
+                break;
             }
         }
 
+
+
+        // 4. MOTOR-BEFEHLE gedrosselt auf min 10ms Pause
+        // --- SCHEDULER AUSFÜHRUNG ---
+        if (now - last_scheduler_tick > step_interval) {
+            last_scheduler_tick = now;
+
+            // Den aktuellen Stein aus dem Array holen
+            // BuWizz* b = mulBuWizz[current_brick_idx];
+
+            // Sicherheits-Check: Nur senden, wenn Stein initialisiert
+            if (all_ready) {
+                // Hier kommen später die Stick-Werte rein
+                mulBuWizz[current_brick_idx]->setMotors(60, 60, 60, 60);
+            }
+            //  else if (mulBuWizz[current_brick_idx]->isConnected()) {
+            //     // Not-Aus solange die Flotte noch nicht bereit ist
+            //     mulBuWizz[current_brick_idx]->setMotors(0, 0, 0, 0);
+            // }
+
+            // Index für den nächsten Durchlauf hochzählen
+            current_brick_idx = (current_brick_idx + 1) % NUM_BRICKS;
+        }
         // CPU freigeben (wichtig!)
         vTaskDelay(1);
     }
 }
-
-
-
-
-
-
-
-        // // In myMainTask
-        // static uint64_t last_bt_tick = 0;
-
-        // if (now - last_bt_tick > 30000) { // 30ms Zyklus
-        //     last_bt_tick = now;
-
-        //     for (int b = 0; b < NUM_BRICKS; b++) {
-        //         // 1. Discovery/Connect immer für alle (WICHTIG!)
-        //         mulBuWizz[b]->update(now); 
-
-        //         // 2. Fahren nur, wenn bereit
-        //         if (mulBuWizz[b]->isConnected() && mulBuWizz[b]->getMotorHandle() != 0) {
-        //             // Testwert 60 an alle 4 Ausgänge
-        //             mulBuWizz[b]->setMotors(60, 60, 60, 60); 
-        //         }
-        //     }
-        // }
-
-
-
-
-
-        // // In myMainTask
-        // static uint64_t last_bt_tick = 0;
-
-        // if (now - last_bt_tick > 50000) { // 50ms Zyklus (20 Hz)
-        //     last_bt_tick = now;
-
-        //     // A) Erst alle Steine updaten (Discovery / Mode-Set)
-        //     bool all_bricks_ready = true;
-        //     for (int b = 0; b < NUM_BRICKS; b++) {
-        //         mulBuWizz[b]->update(now);
-        //         if (!mulBuWizz[b]->isReady()) {
-        //             all_bricks_ready = false;
-        //         }
-        //     }
-
-        //     // B) NUR WENN ALLE BEREIT SIND, STARTEN WIR DIE MOTOREN
-        //     if (all_bricks_ready) {
-        //         for (int b = 0; b < NUM_BRICKS; b++) {
-        //             // Hier deine Stick-Werte einsetzen
-        //             mulBuWizz[b]->setMotors(60, 60, 60, 60); 
-        //         }
-        //     } else {
-        //         // Optional: Kleiner Print während des Wartens
-        //         // printf("Warten auf Discovery aller Steine...\n");
-        //     }
-        // }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        // static uint64_t last_motor_update = 0;
-        // if (now - last_motor_update > 100000) { // Alle 100ms (100 Hz)
-        //     for (int b = 0; b < NUM_BRICKS; b++) {
-        //         mulBuWizz[b]->update(now); 
-        //         // if (mulBuWizz[b]->isConnected() && mulBuWizz[b]->getMotorHandle() != 0) {
-        //         //     mulBuWizz[b]->setMotors(50, 50, 50, 50); 
-        //         // }
-        //     }
-        //     last_motor_update = now;
-        // }
-
-
-
-
-
-
-
-
-
-
-
-
-        // for (int b = 0; b < NUM_BRICKS; b++) {
-
-        //     // State-Machine der BuWizz-Klasse
-        //     mulBuWizz[b]->process();
-
-        //     // 1. Startverzögerung (1.5s)
-        //     if (!buwizz_started[b] && (now - buwizz_start_time[b] > 1500000)) {
-        //         mulBuWizz[b]->connect();
-        //         buwizz_started[b] = true;
-        //     }
-
-        //     // 2. Verbindung prüfen
-        //     if (mulBuWizz[b]->isConnected()) {
-
-        //         // Verbindung stabil → Timestamp setzen
-        //         if (connection_timestamp[b] == 0) connection_timestamp[b] = now;
-
-        //         // 3. Nach 2 Sekunden: Fast Mode setzen
-        //         if (!mode_sent[b] && (now - connection_timestamp[b] > 2000000)) {
-        //             printf("BuWizz[%d]: Sende Fast Mode...\n", b);
-        //             mulBuWizz[b]->setMode(3);
-        //             mode_sent[b] = true;
-        //         }
-
-        //         // 4. Nach 4 Sekunden: Motor-Test
-        //         if (mode_sent[b] && !test_motors_sent[b] &&
-        //             (now - connection_timestamp[b] > 4000000)) {
-
-        //             printf("BuWizz[%d]: Sende Motor-Test...\n", b);
-        //             mulBuWizz[b]->setMotors(120, 120, 120, 120);
-        //             test_motors_sent[b] = true;
-        //         }
-
-        //         // 5. Alle 5 Sekunden: Batterie abfragen
-        //         if (now - last_battery_check[b] > 5000000) {
-        //             mulBuWizz[b]->requestBattery();
-        //             last_battery_check[b] = now;
-        //         }
-
-        //     } else {
-        //         // Reset bei Disconnect
-        //         connection_timestamp[b] = 0;
-        //         mode_sent[b] = false;
-        //         test_motors_sent[b] = false;
-        //     }
-        // }
-
-
-        // buwizz.process();
-
-        // if (!buwizz_started && (now - buwizz_start_time > 1500000)) {
-        //     buwizz.connect();
-        //     buwizz_started = true;
-        // }
-        // // 1. Verbindung prüfen
-        // if (buwizz.isConnected()) {
-        //     // Wir merken uns, wann die Verbindung STABIL wurde
-        //     if (connection_timestamp == 0) connection_timestamp = now;
-
-        //     // 2. Nach 2 Sekunden Verbindung: Modus setzen
-        //     if (!mode_sent && (now - connection_timestamp > 2000000)) {
-        //         printf("Main: Sende Fast Mode...\n");
-        //         buwizz.setMode(3);
-        //         mode_sent = true;
-        //     }
-
-        //     // 3. Nach 4 Sekunden Verbindung: Kurzer Motor-Test
-        //     if (mode_sent && !test_motors_sent && (now - connection_timestamp > 4000000)) {
-        //         printf("Main: Sende Motor-Test-Befehl...\n");
-        //         buwizz.setMotors(120, 120, 120, 120);
-        //         test_motors_sent = true;
-        //     }
-
-        // } else {
-        //     // Reset, falls die Verbindung abbricht
-        //     connection_timestamp = 0;
-        //     mode_sent = false;
-        //     test_motors_sent = false;
-        // }
 
         // if (buwizz.isConnected() && (now - last_battery_check > 5000000)) {
         //     buwizz.requestBattery();

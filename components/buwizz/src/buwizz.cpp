@@ -278,8 +278,20 @@ void BuWizz::setMotors(int8_t m1, int8_t m2, int8_t m3, int8_t m4) {
     _motor_payload[4] = (uint8_t)m4;
     _motor_payload[5] = 0x00; // Brake Mask (0 = Ausrollen)
 
-    // Optionaler Debug-Print (kann bei hoher Frequenz das Log fluten)
-    // printf("BuWizz Motors: %d, %d, %d, %d\n", m1, m2, m3, m4);
+    // _mode_counter++;
+    // if (_mode_counter >= 50) {
+    //     this->setMode(3);
+    //     _mode_counter = 0;
+    // }
+
+    // DEBUG PRINT (nur alle 2 Sekunden, sonst Log-Spam)
+    static uint64_t last_print = 0;
+    if (esp_timer_get_time() - last_print > 2000000) {
+        printf("[SEND] Brick %02X -> Handle: 0x%04X | Zimmer: 0x%04X\n | m1:%d m2:%d m3:%d m4:%d \n", 
+               _addr[5], _con_handle, _motor_handle, m1, m2, m3, m4);
+        last_print = esp_timer_get_time();
+    }
+
 
     uint8_t err = gatt_client_write_value_of_characteristic_without_response(
         _con_handle, _motor_handle, 6, _motor_payload);
@@ -331,6 +343,10 @@ uint16_t BuWizz::getMotorHandle() {
     return _motor_handle; 
 }
 
+hci_con_handle_t BuWizz::getConnectHandle() { 
+    return _con_handle; 
+}
+
 bool BuWizz::isConnected() { 
     return _connected; 
 }
@@ -341,6 +357,10 @@ bool BuWizz::isConnectTriggered() {
 
 bool BuWizz::isCharFound(){
     return _char_found;
+}
+
+uint8_t BuWizz::getAddr(int id){
+    return _addr[id];
 }
 
 

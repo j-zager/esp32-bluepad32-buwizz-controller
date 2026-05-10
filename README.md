@@ -108,18 +108,34 @@ tio /dev/ttyACM0
     - Paid for commercial projects.
     - <https://github.com/bluekitchen/btstack/blob/master/LICENSE>
 
-## Introduction 
-A clean and extensible ESP‑IDF project that combines Bluepad32 (PS4 controller support) with a fully modular BuWizz BLE client for LEGO robotics.
-The project provides a dedicated controller class implementing press, long‑press, double‑press, trigger, and analog stick events, while maintaining stable, parallel BLE communication with one or more BuWizz devices.
+## Introduction to the Buwizz-Gamepad-ESP32 project
+A  ESP‑IDF project that combines Bluepad32 (PS4 controller support) with a fully modular BuWizz BLE client for LEGO robotics.
+The project provides a dedicated controller class implementing press, long‑press, double‑press, trigger, and analog stick events, while maintaining parallel BLE communication with one or more BuWizz devices.
 
 The architecture emphasizes:
 
-Strict separation of concerns (Controller module, BuWizz module, Application layer)
+Separation of concerns (Controller module, BuWizz module, Application layer)
 
-Deterministic event handling via a custom PS4 input state machine
+Event handling via a custom PS4 input state machine
 
-Reliable BLE operation through queued GATT writes and explicit service/characteristic discovery
+BLE operation through queued GATT writes and explicit service/characteristic discovery
 
-Scalability for multi‑BuWizz setups
+Scalability for multi‑BuWizz setups, via adding Buwizz in adress 
 
-Reproducible ESP‑IDF workflows with no hidden configuration overrides
+
+
+### ToDo's
+
+#### High Prio
+
+- stabilize connect process(quicker)
+- implement faster reconnect process
+- implement get/set methods to access/save motor values at each brick
+
+#### Middle Prio
+- create config file for buwizz adresses, assignment of controller commands and pin settings
+- analyse min time between motor/ mode commands  to react smoother
+#### Low Prio
+- implement/ rework Buwizz battery request
+
+
