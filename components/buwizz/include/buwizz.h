@@ -17,6 +17,7 @@ public:
     void connect();
     void process();
     void setMotors(int8_t m1, int8_t m2, int8_t m3, int8_t m4);
+    void useMotors();
     void setMode(uint8_t mode);
     void requestBattery();
     // void update(uint64_t now);
@@ -29,6 +30,10 @@ public:
     hci_con_handle_t getConnectHandle();
     bool isReady();
     uint8_t getAddr(int id);
+    void saveMotor(int8_t m, int8_t idx);
+    uint8_t getMotor( int8_t idx);
+    void saveMotorAll(int8_t m1,int8_t m2,int8_t m3,int8_t m4,int8_t brakeMask);
+    uint8_t* getMotorAll();
     // Der Handler muss statisch sein für BTstack
     static void packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 

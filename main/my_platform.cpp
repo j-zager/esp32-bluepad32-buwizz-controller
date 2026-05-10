@@ -314,6 +314,11 @@ void myMainTask(void* p) {
     uint64_t step_interval = TARGET_CYCLE_TIME / NUM_BRICKS;
     if (step_interval < MIN_GAP_TIME) step_interval = MIN_GAP_TIME;
 
+    // Motoren test
+    for (int bu = 0; bu < 4; bu++) {
+        mulBuWizz[bu]->saveMotorAll(60,60,60,60,0);
+    }
+
     while (1) {
         uint64_t now = esp_timer_get_time();
 
@@ -401,7 +406,8 @@ void myMainTask(void* p) {
             // Sicherheits-Check: Nur senden, wenn Stein initialisiert
             if (all_ready) {
                 // Hier kommen später die Stick-Werte rein
-                mulBuWizz[current_brick_idx]->setMotors(60, 60, 60, 60);
+                // mulBuWizz[current_brick_idx]->setMotors(60, 60, 60, 60);
+                mulBuWizz[current_brick_idx]->useMotors();
             }
             //  else if (mulBuWizz[current_brick_idx]->isConnected()) {
             //     // Not-Aus solange die Flotte noch nicht bereit ist

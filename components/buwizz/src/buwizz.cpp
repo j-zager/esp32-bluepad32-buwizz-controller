@@ -299,6 +299,27 @@ void BuWizz::setMotors(int8_t m1, int8_t m2, int8_t m3, int8_t m4) {
     if (err && err != 0x94) printf("Motor Error: 0x%02x\n", err);
 }
 
+
+void BuWizz::useMotors() {
+    if (!_connected || _motor_handle == 0) return;
+
+
+    // DEBUG PRINT (nur alle 2 Sekunden, sonst Log-Spam)
+    static uint64_t last_print = 0;
+    if (esp_timer_get_time() - last_print > 2000000) {
+        printf("[SEND] Brick %02X -> Handle: 0x%04X | Zimmer: 0x%04X\n | m1:%d m2:%d m3:%d m4:%d \n", 
+               _addr[5], _con_handle, _motor_handle, _motor_payload[1], _motor_payload[2],
+                _motor_payload[3], _motor_payload[4]);
+        last_print = esp_timer_get_time();
+    }
+
+
+    uint8_t err = gatt_client_write_value_of_characteristic_without_response(
+        _con_handle, _motor_handle, 6, _motor_payload);
+    //Fehler 0x94 (Busy) siehst, ist das bei Bluetooth normal, wenn Pakete zu schnell kommen
+    if (err && err != 0x94) printf("Motor Error: 0x%02x\n", err);
+}
+
 void BuWizz::requestBattery() {
     if (!_connected || _motor_handle == 0) return;
     
@@ -338,6 +359,33 @@ void BuWizz::triggerConnect(uint64_t now) {
         }
     }
 }
+
+
+void BuWizz::saveMotor(int8_t m, int8_t idx) {
+    if (idx<0 || idx> 5) return ;
+
+    // Wir füllen das Array in der Klasse
+    _motor_payload[idx] = m; // Command: Set Motor Data
+    return;
+}
+uint8_t BuWizz::getMotor( int8_t idx) {
+    if (idx < 0 || idx > 5) return 0;
+    return _motor_payload[idx];
+}
+
+void BuWizz::saveMotorAll(int8_t m1,int8_t m2,int8_t m3,int8_t m4,int8_t brakeMask ) {
+    _motor_payload[0] = 0x10; // Command: Set Motor Data
+    _motor_payload[1] = (uint8_t)m1;
+    _motor_payload[2] = (uint8_t)m2;
+    _motor_payload[3] = (uint8_t)m3;
+    _motor_payload[4] = (uint8_t)m4;
+    _motor_payload[5] = brakeMask; // Brake Mask (0 = Ausrollen)
+    return;
+}
+uint8_t* BuWizz::getMotorAll() {
+    return _motor_payload;
+}
+
 
 uint16_t BuWizz::getMotorHandle() { 
     return _motor_handle; 
