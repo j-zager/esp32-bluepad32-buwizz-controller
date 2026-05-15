@@ -54,6 +54,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
     uint8_t event = hci_event_packet_get_type(packet);
     BuWizz* current = nullptr;
+    uint16_t con_handle = 0xFFFF;
 
     //     // --- DEBUG: JEDES HCI PAKET ANZEIGEN ---
     // if (event == HCI_EVENT_LE_META) {
@@ -64,38 +65,77 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
     // }
 
     // --- 1. WER IST DER ABSENDER? ---
+    // --- A) IDENTIFIZIERUNG ÜBER MAC (Bei Erstkontakt) ---
     if (event == HCI_EVENT_LE_META) {
         uint8_t subevent = hci_event_le_meta_get_subevent_code(packet);
+
+        // A) Beim Scan-Report (0x02) liegt die MAC ab Index 6 rückwärts
         if (subevent == HCI_SUBEVENT_LE_ADVERTISING_REPORT) { // SCAN: Über MAC finden
-            bd_addr_t addr;
-            for (int i = 0; i < 6; i++) addr[i] = packet[11 - i];
+            bd_addr_t scan_mac;
+            for (int i = 0; i < 6; i++) scan_mac[i] = packet[11 - i];
             for (int i = 0; i < NUM_BRICKS; i++) {
-                if (memcmp(addr, mulBuWizz[i]->_addr, 6) == 0) { 
+                if (memcmp(scan_mac, mulBuWizz[i]->_addr, 6) == 0) { 
                     current = mulBuWizz[i]; 
-                    printf("[IDENT] Scan-Treffer für Stein: %02X <> id: %d\n", current->_addr[5], i);
+                    printf("[IDENT] Scan-Treffer für Stein: %02X <> id: %d <> via scan_mac\n", current->_addr[5], i);
                     break; 
                 }
             }
-        } else { // CONNECT: Nimm das erste freie Objekt (0x01/0x0a)
-            uint16_t h = little_endian_read_16(packet, 4);
-            printf("[DEBUG] Connect-Paket mit Handle 0x%04X\n", h);
+        } 
+
+        // 2. CONNECT: Echte Makros extrahieren die MAC fehlerfrei aus dem Event-Buffer
+        else if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
+            bd_addr_t connect_mac;
+            hci_subevent_le_connection_complete_get_peer_address(packet, connect_mac);
             for (int i = 0; i < NUM_BRICKS; i++) {
-                if (mulBuWizz[i]->_con_handle == h) { 
-                    current = mulBuWizz[i]; break; 
-                    printf("[IDENT] Bestehendes Handle 0x%04X erkannt via con handle\n", h);
+                if (memcmp(connect_mac, mulBuWizz[i]->_addr, 6) == 0) { 
+                    current = mulBuWizz[i]; 
+                    printf("[IDENT] [CON] Scan-Treffer für Stein: %02X <> id%d <> via connnect_mac\n", connect_mac[5], i);
+                    break; 
                 }
-                if (!mulBuWizz[i]->_connected && current == nullptr) {
-                    printf("[IDENT] Bestehendes Handle 0x%04X erkannt via current == nullptr\n", h);
-                    current = mulBuWizz[i];
+            }
+        } 
+        else if (subevent == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1) {
+            bd_addr_t connect_mac;
+            hci_subevent_le_enhanced_connection_complete_v1_get_peer_addresss(packet,connect_mac);
+            for (int i = 0; i < NUM_BRICKS; i++) {
+                if (memcmp(connect_mac, mulBuWizz[i]->_addr, 6) == 0) { 
+                    current = mulBuWizz[i]; 
+                    printf("[IDENT] [CON_V1] Scan-Treffer für Stein: %02X <> id%d <> via connnect_mac\n", connect_mac[5], i);
+                    break; 
                 }
             }
         }
-    } else { // GATT / DISCONNECT: Über Handle finden
-        uint16_t h = little_endian_read_16(packet, (event == HCI_EVENT_DISCONNECTION_COMPLETE) ? 3 : 2);
+        // Falls wir das Objekt über die MAC bei LE_META Events (0x3E) nicht direkt haben,
+        // lesen wir das Handle an der offiziellen HCI-Meta-Stelle (Byte 4) aus.
+        if (!current && subevent != HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
+            con_handle = little_endian_read_16(packet, 4);
+        }
+
+    }
+    // --- B) IDENTIFIZIERUNG ÜBER HANDLE (Bei laufender Kommunikation) ---
+    else if (event == HCI_EVENT_DISCONNECTION_COMPLETE) {
+        con_handle = hci_event_disconnection_complete_get_connection_handle(packet);
+    } 
+    else if (event == GATT_EVENT_SERVICE_QUERY_RESULT){
+        con_handle = gatt_event_service_query_result_get_handle(packet);
+    }
+    else if (event == GATT_EVENT_CHARACTERISTIC_QUERY_RESULT){
+        con_handle = gatt_event_characteristic_query_result_get_handle(packet);
+    }
+    else if (event == GATT_EVENT_QUERY_COMPLETE){
+        con_handle = gatt_event_query_complete_get_handle(packet);
+    }
+    else if (event == GATT_EVENT_NOTIFICATION){
+        con_handle = gatt_event_notification_get_handle(packet);
+    }
+
+    // --- C) FLOTTEN-ZUORDNUNG ---
+    if (!current && con_handle != HCI_CON_HANDLE_INVALID) {
         for (int i = 0; i < NUM_BRICKS; i++) {
-            if (mulBuWizz[i]->_con_handle == h) { 
-                current = mulBuWizz[i]; 
-                break; 
+            if (mulBuWizz[i]->_con_handle == con_handle) {
+                current = mulBuWizz[i];
+                printf("[IDENT] Scan-Treffer für Stein: %02X <> id%d <> via con_handle:%02X in event: %02X\n", mulBuWizz[i]->_addr[5], i,con_handle,event); 
+                break;
             }
         }
     }
@@ -135,7 +175,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     printf("[INFO] Connected - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                         current->_addr[0], current->_addr[1], current->_addr[2], 
                         current->_addr[3], current->_addr[4], current->_addr[5]);
-                    printf("BuWizz: ✔ Verbunden!-KONSTANT GRÜN! Handle: 0x%04x.\n", current->_con_handle);
+                    printf("BuWizz: ✅ Verbunden!-KONSTANT GRÜN! Handle: 0x%04x.\n", current->_con_handle);
                     // connect trigger freigeben wenn verbunden
                     current->_connect_triggered = false;
                     current->_was_connected = true;

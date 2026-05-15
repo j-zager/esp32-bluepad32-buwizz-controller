@@ -353,8 +353,12 @@ void myMainTask(void* p) {
             any_trigger = false;
             for(int i=0; i<NUM_BRICKS; i++) {
                 // Falls jemand weder verbunden ist noch gerade versucht zu verbinden
-                // if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->isConnectTriggered()) missing = true;
-                if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->getMotorHandle()!=0) missing = true;
+                //  if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->isConnectTriggered())missing = true;
+                if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->getMotorHandle()!=0){ 
+                    printf("Missing id %d 0x%02X\n",i,mulBuWizz[i]->getAddr(5));
+                    missing = true;
+                } 
+                
 
                 // Wer noch nicht fahrbereit ist (Discovery läuft noch)
                 if(!mulBuWizz[i]->isReady()) {
@@ -374,7 +378,7 @@ void myMainTask(void* p) {
             else  if(all_ready){
                 printf("Main: Alle Steine verbunden stoppe Scan\n");
                 for (int idx = 0; idx < NUM_BRICKS; idx++) {
-                    printf("loop Id:%d Buwizz id: 0x%02X motor handle 0x%04X\n ",idx,mulBuWizz[idx]->getAddr(5), mulBuWizz[idx]->getConnectHandle());
+                    printf("loop Id:%d Buwizz id: 0x%02X motor conhandle 0x%04X\n ",idx,mulBuWizz[idx]->getAddr(5), mulBuWizz[idx]->getConnectHandle());
                 }
                 uni_bt_le_scan_stop();
             }
