@@ -300,6 +300,7 @@ void myMainTask(void* p) {
     static bool missing = false;
     // static bool all_connected = false;
     static bool all_ready = true;
+    static bool any_trigger = false;
 
     // Statische Variablen für das Timing
     static uint64_t last_scheduler_tick = 0;
@@ -348,20 +349,24 @@ void myMainTask(void* p) {
         if (now - last_scan_retry > 4000000) { // Alle 4 Sekunden prüfen
             // all_connected = true;
             missing = false;
-             all_ready = true;
+            all_ready = true;
+            any_trigger = false;
             for(int i=0; i<NUM_BRICKS; i++) {
                 // Falls jemand weder verbunden ist noch gerade versucht zu verbinden
-                if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->isConnectTriggered()) missing = true;
-                // if(!mulBuWizz[i]->isConnected() || !mulBuWizz[i]->isConnectTriggered() 
-                //         || !mulBuWizz[i]->isCharFound() || mulBuWizz[i]->getMotorHandle() == 0){
-                //     all_connected = false;
-                // } 
+                // if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->isConnectTriggered()) missing = true;
+                if(!mulBuWizz[i]->isConnected() && !mulBuWizz[i]->getMotorHandle()!=0) missing = true;
+
                 // Wer noch nicht fahrbereit ist (Discovery läuft noch)
                 if(!mulBuWizz[i]->isReady()) {
                     all_ready = false;
                 }
+                // ein Buwizz ist im Verbinde Prozess
+                if(mulBuWizz[i]->isConnectTriggered()){
+                    any_trigger = true;
+                }
+
             }
-            if(missing) {
+            if(missing && !any_trigger) {
                 printf("Main: Jemand fehlt, starte Scan...\n");
                 uni_bt_le_scan_start();
                 missing = false;
@@ -383,6 +388,8 @@ void myMainTask(void* p) {
         }
 
 
+
+
         // --- 3. ECHTZEIT-PRÜFUNG DER FLOTTE (Jeden Loop-Durchgang!) ---
         // Das hier darf NICHT im 4-Sekunden-Block stehen
         all_ready = true;
@@ -392,8 +399,6 @@ void myMainTask(void* p) {
                 break;
             }
         }
-
-
 
         // 4. MOTOR-BEFEHLE gedrosselt auf min 10ms Pause
         // --- SCHEDULER AUSFÜHRUNG ---

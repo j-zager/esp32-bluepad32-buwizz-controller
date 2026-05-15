@@ -9,7 +9,7 @@ static const uint8_t BUWIZZ_SERVICE_UUID128[] = {
     0x88, 0xb3, 0x99, 0x19, 0xb1, 0x67, 0x6e, 0x93 
 };
 
-// In der BuWizz.cpp oben
+// 
 static const uint16_t BUWIZZ_CHAR_UUID16 = 0x92D1;// 0x92D1
 
 
@@ -72,7 +72,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             for (int i = 0; i < NUM_BRICKS; i++) {
                 if (memcmp(addr, mulBuWizz[i]->_addr, 6) == 0) { 
                     current = mulBuWizz[i]; 
-                    printf("[IDENT] Scan-Treffer für Stein %d\n", i);
+                    printf("[IDENT] Scan-Treffer für Stein: %02X <> id: %d\n", current->_addr[5], i);
                     break; 
                 }
             }
@@ -111,8 +111,10 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
             // SCHRITT 1: BuWizz im Scan finden
             if (subevent == HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
-                 // Wir verbinden nur, wenn dieser Stein noch nicht verbunden ist
-                // if (!current->_connected && current->_con_handle == HCI_CON_HANDLE_INVALID) {
+                //  Sofortige harte Sperre: Wenn getriggert oder verbunden -> ABBRUCH
+                if (current->_connected || current->_connect_triggered) {
+                    return; 
+                }
                 if (!current->_connected && !current->_connect_triggered) {
                     printf("Scan - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                         current->_addr[0], current->_addr[1], current->_addr[2], 
@@ -134,7 +136,9 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                         current->_addr[0], current->_addr[1], current->_addr[2], 
                         current->_addr[3], current->_addr[4], current->_addr[5]);
                     printf("BuWizz: ✔ Verbunden!-KONSTANT GRÜN! Handle: 0x%04x.\n", current->_con_handle);
-
+                    // connect trigger freigeben wenn verbunden
+                    current->_connect_triggered = false;
+                    current->_was_connected = true;
                     // --- WICHTIG: Scan sofort wieder an für den nächsten Stein ---
                     bool anyone_missing = false;
                     for (int i = 0; i < NUM_BRICKS; i++) {
@@ -244,7 +248,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             current->_motor_handle = 0;
             current->_con_handle = HCI_CON_HANDLE_INVALID;
             current->_char_found =false;
-            current->_connect_triggered = false;
+            current->_connect_triggered = false; // Zur Sicherheit freischalten
             current->_mode_set = false;
             // Wenn alle getrennt sind, Scan wieder starten
             uni_bt_le_scan_start(); 
@@ -338,6 +342,21 @@ void BuWizz::requestBattery() {
 void BuWizz::triggerConnect(uint64_t now) {
     if (_init_time == 0) _init_time = now;
 
+    if (_connect_triggered && !_connected) {
+        // static uint64_t start_connecting_time = 0;
+        if(start_connecting_time == 0) start_connecting_time = now;
+
+        if (now - start_connecting_time > 10000000) { // 10 Sek Timeout
+            printf("[WARN] Stein %02X Handshake Timeout. Resetting...\n",_addr[5]);
+            _connect_triggered = false; // Reset um neuen Trigger zu erlauben
+            start_connecting_time = 0;
+            // Scan wird durch MainTask (Schritt 2) automatisch neu gestartet
+        }
+    } else {
+        start_connecting_time = 0;
+    }
+
+
     // A) Wenn nicht verbunden: Alles zurücksetzen und warten
     if (!_connected) {
         _connected_at = 0;
@@ -397,6 +416,10 @@ hci_con_handle_t BuWizz::getConnectHandle() {
 
 bool BuWizz::isConnected() { 
     return _connected; 
+}
+
+bool BuWizz::wasConnected() { 
+    return _was_connected; 
 }
 
 bool BuWizz::isConnectTriggered() { 

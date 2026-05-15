@@ -24,6 +24,7 @@ public:
     void triggerConnect(uint64_t now);
     
     bool isConnected();
+    bool wasConnected();
     bool isConnectTriggered(); 
     bool isCharFound();
     uint16_t getMotorHandle();
@@ -44,8 +45,9 @@ private:
     hci_con_handle_t _con_handle = HCI_CON_HANDLE_INVALID;
     // bd_addr_t _addr = {0x50, 0xFA, 0xAB, 0x6D, 0x03, 0x4C};
     bd_addr_t _addr;
-    bool _connected;
-    uint16_t _motor_handle; 
+    bool _connected = false;
+    bool _was_connected = false;        // nutzen zum reconnect nach Stein schonmal erfolgreich gefunden wurde
+    uint16_t _motor_handle = 0; 
 
     gatt_client_service_t buwizz_service;
     bool service_found;
@@ -57,6 +59,7 @@ private:
     uint64_t _init_time = 0;           // Wann wurde das Programm gestartet
     uint64_t _connected_at = 0;        // Wann wurde die BT-Verbindung stabil
     uint64_t _last_battery_request = 0;// Wann wurde zuletzt der Akku abgefragt
+    uint64_t start_connecting_time = 0;// Wann wurde die connect Prozess gestartet
     
     bool _connect_triggered = false;   // Wurde connect() schon einmal gerufen Wirkt als Sperre für gap_connect
     bool _char_found =false;            // Wurde charcteristic gefunden, letzte step bevor verbindung komplett erfolgreich ist
