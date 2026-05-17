@@ -59,7 +59,8 @@ private:
     uint64_t _init_time = 0;           // Wann wurde das Programm gestartet
     uint64_t _connected_at = 0;        // Wann wurde die BT-Verbindung stabil
     uint64_t _last_battery_request = 0;// Wann wurde zuletzt der Akku abgefragt
-    uint64_t start_connecting_time = 0;// Wann wurde die connect Prozess gestartet
+    uint64_t _start_connecting_time = 0;// Wann wurde die connect Prozess gestartet
+    uint64_t _force_gap_connect = 0;    // Timer um ein gap connect zu forcieren, wenn ein Stein zu lnage blinkt  
     
     bool _connect_triggered = false;   // Wurde connect() schon einmal gerufen Wirkt als Sperre für gap_connect
     bool _char_found =false;            // Wurde charcteristic gefunden, letzte step bevor verbindung komplett erfolgreich ist

@@ -128,9 +128,9 @@ Scalability for multi‑BuWizz setups, via adding Buwizz in adress
 
 #### High Prio
 
-- stabilize connect process(quicker)
-- implement faster reconnect process
-- implement get/set methods to access/save motor values at each brick
+- stabilize connect process(quicker)(✔)
+- implement faster reconnect process in case was connected try gap connect after timeout
+- verify esp32 connects to the right brick, even in inverse brick activation (✔)
 
 #### Middle Prio
 - create config file for buwizz adresses, assignment of controller commands and pin settings

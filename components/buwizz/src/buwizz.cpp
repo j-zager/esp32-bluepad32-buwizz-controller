@@ -64,12 +64,14 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
     //     // printf("[DEBUG] HCI Event: 0x%02X empfangen\n", event);
     // }
 
-    // --- 1. WER IST DER ABSENDER? ---
+
     // --- A) IDENTIFIZIERUNG ÜBER MAC (Bei Erstkontakt) ---
+    // --- 1. WER IST DER ABSENDER? ---
     if (event == HCI_EVENT_LE_META) {
         uint8_t subevent = hci_event_le_meta_get_subevent_code(packet);
+        // printf("status ok=0 -> check status :%d\n",packet[3]);
 
-        // A) Beim Scan-Report (0x02) liegt die MAC ab Index 6 rückwärts
+        //  Beim Scan-Report (0x02) liegt die MAC ab Index 6 rückwärts
         if (subevent == HCI_SUBEVENT_LE_ADVERTISING_REPORT) { // SCAN: Über MAC finden
             bd_addr_t scan_mac;
             for (int i = 0; i < 6; i++) scan_mac[i] = packet[11 - i];
@@ -109,6 +111,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
         // lesen wir das Handle an der offiziellen HCI-Meta-Stelle (Byte 4) aus.
         if (!current && subevent != HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
             con_handle = little_endian_read_16(packet, 4);
+            printf("[IDENT] Scan-Treffer für Stein: <> non HCI_SUBEVENT_LE_ADVERTISING_REPORT <> via con_handle:%02X in subevent: %02X\n", con_handle,subevent); 
         }
 
     }
@@ -162,6 +165,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     printf("[INFO] BuWizz: Gefunden! Verbinde...\n");
                     current->_connect_triggered = true;
                     uni_bt_le_scan_stop();
+                    printf("gap connect packet type:%02X\n",(bd_addr_type_t)packet[5]);
                     gap_connect(current->_addr, (bd_addr_type_t)packet[5]);
                 }
             }
@@ -274,8 +278,8 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
         case GATT_EVENT_NOTIFICATION: {
             float battV = 3.0f + packet[10] * 0.01f;
-            // Wir printen das Handle mit, um die Steine im Log zu unterscheiden!
-            printf("BuWizz [0x%04x] Batterie: %.2f V\n", current->_con_handle, battV);
+            // Wir printen die Addresse mit, um die Steine im Log zu unterscheiden!
+            printf("BuWizz [0x%04x] Batterie: %.2f V\n", current->_addr[5], battV);
         } break;
 
         case HCI_EVENT_DISCONNECTION_COMPLETE:
@@ -287,9 +291,11 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             current->_connected = false;
             current->_motor_handle = 0;
             current->_con_handle = HCI_CON_HANDLE_INVALID;
-            current->_char_found =false;
+            current->_char_found = false;
             current->_connect_triggered = false; // Zur Sicherheit freischalten
             current->_mode_set = false;
+            current->_start_connecting_time = 0;
+            current->_connected_at = 0;
             // Wenn alle getrennt sind, Scan wieder starten
             uni_bt_le_scan_start(); 
             break;
@@ -383,17 +389,26 @@ void BuWizz::triggerConnect(uint64_t now) {
     if (_init_time == 0) _init_time = now;
 
     if (_connect_triggered && !_connected) {
-        // static uint64_t start_connecting_time = 0;
-        if(start_connecting_time == 0) start_connecting_time = now;
+        if(_start_connecting_time == 0){
+            _start_connecting_time = now;
+        } 
 
-        if (now - start_connecting_time > 10000000) { // 10 Sek Timeout
+        if (now - _start_connecting_time > 36000000) { // 10 -> 4.5Sek Timeout
             printf("[WARN] Stein %02X Handshake Timeout. Resetting...\n",_addr[5]);
+            gap_connect_cancel();
             _connect_triggered = false; // Reset um neuen Trigger zu erlauben
-            start_connecting_time = 0;
-            // Scan wird durch MainTask (Schritt 2) automatisch neu gestartet
+            _start_connecting_time = 0;
+            // WICHTIG: Nach einem Timeout sofort den Scan wieder anwerfen!
+            _motor_handle = 0;
+            _con_handle = HCI_CON_HANDLE_INVALID;
+            _char_found = false;
+            _mode_set = false;
+            _connected_at = 0;
+            //uni_bt_le_scan_start(); 
         }
-    } else {
-        start_connecting_time = 0;
+    } else if(_connected){
+        // Wenn verbunden, Timeout-Timer sauber schlafen legen
+        _start_connecting_time = 0;
     }
 
 
@@ -401,7 +416,7 @@ void BuWizz::triggerConnect(uint64_t now) {
     if (!_connected) {
         _connected_at = 0;
         _mode_set = false;
-        return; 
+        return; // Im unverbundenen Zustand hier abbrechen
     }
 
     // B) Ab hier: Verbindung steht
@@ -411,7 +426,7 @@ void BuWizz::triggerConnect(uint64_t now) {
     // Nur wenn Discovery fertig (Stern ⭐ da) und Modus noch nicht gesetzt
     if (!_mode_set && _motor_handle != 0) {
         // Wir geben dem Stein nach dem "Stern" 500ms Zeit zum Atmen
-        if (now - _connected_at > 500000) {
+        if (now - _connected_at > 200000) {//200ms
             this->setMode(3); 
             _mode_set = true;
             printf("BuWizz [0x%04X]: Setup fertig (Modus 3).\n", _con_handle);

@@ -346,7 +346,7 @@ void myMainTask(void* p) {
 
 
         // 1. Verbinde und Reverbinde Logik
-        if (now - last_scan_retry > 4000000) { // Alle 4 Sekunden prüfen
+        if (now - last_scan_retry > 2000000) { // Alle 4 -> 3s Sekunden prüfen
             // all_connected = true;
             missing = false;
             all_ready = true;
@@ -406,7 +406,7 @@ void myMainTask(void* p) {
 
         // 4. MOTOR-BEFEHLE gedrosselt auf min 10ms Pause
         // --- SCHEDULER AUSFÜHRUNG ---
-        if (now - last_scheduler_tick > step_interval) {
+        if ((now - last_scheduler_tick) > step_interval) {
             last_scheduler_tick = now;
 
             // Den aktuellen Stein aus dem Array holen
