@@ -64,6 +64,9 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
     //     // printf("[DEBUG] HCI Event: 0x%02X empfangen\n", event);
     // }
 
+    if (event == HCI_EVENT_COMMAND_COMPLETE) {
+        return; // Command Complete hat keine Relevanz für das Stein-Mapping!
+    }
 
     // --- A) IDENTIFIZIERUNG ÜBER MAC (Bei Erstkontakt) ---
     // --- 1. WER IST DER ABSENDER? ---
@@ -136,6 +139,8 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
         // lesen wir das Handle an der offiziellen HCI-Meta-Stelle (Byte 4) aus.
         if (!current && subevent != HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
             con_handle = little_endian_read_16(packet, 4);
+            con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet); // 0x01 HCI_SUBEVENT_LE_CONNECTION_COMPLETE
+            con_handle = hci_subevent_le_connection_update_complete_get_connection_handle(packet);// 0x03 HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE
             printf("[IDENT] Scan-Treffer für Stein: <> non HCI_SUBEVENT_LE_ADVERTISING_REPORT <> via con_handle:%02X in subevent: %02X\n", con_handle,subevent); 
         }
 
@@ -215,13 +220,19 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             // SCHRITT 2: Verbindung erfolgreich
             else if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE || 
                 subevent == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1) {
+                // --- DIE DOPPEL-SPERRE (VERRIEGELUNG) ---
+                // Wenn dieser Stein bereits als "verbunden" markiert ist, 
+                // ignorieren wir das zweite, doppelte Event komplett!
+                if (current->_connected) {
+                    return; 
+                }
 
                 uint8_t status = 0;
                 hci_con_handle_t temp_handle = HCI_CON_HANDLE_INVALID;
                 if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
                     status = hci_subevent_le_connection_complete_get_status(packet);
                     temp_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
-                } else {
+                } else if(subevent == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1) {
                     status = hci_subevent_le_enhanced_connection_complete_v1_get_status(packet);
                     temp_handle = hci_subevent_le_enhanced_connection_complete_v1_get_connection_handle(packet);
                 }
@@ -238,17 +249,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     // connect trigger freigeben wenn verbunden
                     current->_connect_triggered = false;
                     current->_was_connected = true;
-                    // --- WICHTIG: Scan sofort wieder an für den nächsten Stein ---
-                    bool anyone_missing = false;
-                    for (int i = 0; i < NUM_BRICKS; i++) {
-                        if (!mulBuWizz[i]->_connected) anyone_missing = true;
-                    }
-                    
-                    if (anyone_missing) {
-                        printf("BuWizz: Starte Scan neu für weitere Steine...\n");
-                        uni_bt_le_scan_start();
-                    }
-
+                    // Wichtig hier nicht Scan aktivieren
                     // Sofortige Service-Suche (UUID128 vorwärts)
                     gatt_client_discover_primary_services_by_uuid128(
                         &BuWizz::packetHandler, current->_con_handle, BUWIZZ_SERVICE_UUID128);
@@ -263,7 +264,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     current->_con_handle = HCI_CON_HANDLE_INVALID;
                     current->_connected_at = 0;
 
-                    printf("BuWizz: Connect Fehler 0x%02X. Scan Restart.\n", packet[3]);
+                    printf("BuWizz: Connect Fehler 0x%02X. Scan Restart.\n", status);
                     uni_bt_le_scan_start();
                 }
 
@@ -314,6 +315,22 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     //uni_bt_le_scan_stop();
                 }
             }  
+            // --- DIE ENTSCHEIDENDE RETTUNG BEI KRYPTO-HÄNGERN ---
+            else {
+                // Suche beendet, aber weder Service gefunden noch Motor-Handle da!
+                printf("[WARN] BuWizz [0x%02X]: Discovery fehlgeschlagen (Krypto-Blockade). Erzwinge Disconnect handle [0x%04X] ...\n", current->_addr[5],current->_con_handle);
+                
+                // Wir kappen die fehlerhafte Geister-Verbindung aktiv auf Hardware-Ebene!
+                gap_disconnect(current->_con_handle); 
+                
+                // Alle Flags im Objekt säubern, damit der nächste Versuch frisch startet
+                current->_connected = false;
+                current->_connect_triggered = false;
+                current->_mode_set = false;
+                current->_char_found = false;
+                current->_motor_handle = 0;
+                current->_connected_at = 0;
+            }
             break;
 
         // 5. CHARACTERISTIC GEFUNDEN
@@ -348,6 +365,9 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             printf("HCI_EVENT_DISCONNECTION_COMPLETE - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
                 current->_addr[0], current->_addr[1], current->_addr[2], 
                 current->_addr[3], current->_addr[4], current->_addr[5]);
+
+            // Altes Pairing komplett im Stack löschen ---
+            gap_drop_link_key_for_bd_addr(current->_addr);
 
             printf("BuWizz [0x%04x]: ❌ Getrennt.\n", current->_con_handle);
             current->_connected = false;
