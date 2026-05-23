@@ -107,6 +107,31 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 }
             }
         }
+
+        if (!current && (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE || subevent == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1)) {
+            uint8_t status = 0;
+            
+            // BTstack-Makros holen den Status automatisch an der richtigen Byte-Schnittstelle:
+            if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
+                status = hci_subevent_le_connection_complete_get_status(packet);
+            } else {
+                status = hci_subevent_le_enhanced_connection_complete_v1_get_status(packet);
+            }
+
+            // Wenn der Status ungleich 0 (Erfolg) ist, handelt es sich GARANTIERT um einen Fehler!
+            if (status != 0) {
+                for (int i = 0; i < NUM_BRICKS; i++) {
+                    if (mulBuWizz[i]->_connect_triggered && !mulBuWizz[i]->_connected) {
+                        current = mulBuWizz[i];
+                        printf("[IDENT] >>> Fehlgeschlagener Handshake (Status 0x%02X) wurde Stein %02X (ArrayId: %d) zugeordnet! <<<\n", 
+                            status, current->_addr[5], i);
+                        break;
+                    }
+                }
+            }
+        }
+        // bd_addr_t errorAdress ;
+
         // Falls wir das Objekt über die MAC bei LE_META Events (0x3E) nicht direkt haben,
         // lesen wir das Handle an der offiziellen HCI-Meta-Stelle (Byte 4) aus.
         if (!current && subevent != HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
@@ -141,7 +166,25 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 break;
             }
         }
+    }        // --- DER ENTSCHEIDENDE RETTUNGS-ANKER FÜR DEN 0xFFFF FEHLERFALL ---
+    else if (!current && con_handle == HCI_CON_HANDLE_INVALID ){//&& event == HCI_EVENT_LE_META) {
+        // uint8_t subevent = hci_event_le_meta_get_subevent_code(packet);
+        // if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE || subevent == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1) {
+            
+            for (int i = 0; i < NUM_BRICKS; i++) {
+                // Wir suchen den EINEN Stein, der gerade die Antenne blockiert (triggered), aber noch nicht online ist
+                //check which brick has a connect trigger, no established connection and only if one trigger is active to be sure allow blind connecting
+                if (mulBuWizz[i]->_connect_triggered && !mulBuWizz[i]->_connected && mulBuWizz[i]->triggerActive() == 1) {
+                    // current = mulBuWizz[i];
+                    mulBuWizz[i]->_connect_triggered = false;
+                    printf("[IDENT] >>> HARDWARE-FEHLER (Handle 0xFFFF): %02X <> id%d <> via leftover connect_trigger handle:%02X in event: %02X\n", mulBuWizz[i]->_addr[5], i,con_handle,event);
+                    break;
+                }
+            }
+        // }
     }
+
+
     if (!current) {
         // printf("[WARN] Paket konnte keinem Stein zugeordnet werden! (Event 0x%02X)\n", event);
         return;
@@ -172,8 +215,20 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             // SCHRITT 2: Verbindung erfolgreich
             else if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE || 
                 subevent == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1) {
-                if (packet[3] == 0) { // Status OK
-                    current->_con_handle = little_endian_read_16(packet, 4);
+
+                uint8_t status = 0;
+                hci_con_handle_t temp_handle = HCI_CON_HANDLE_INVALID;
+                if (subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE) {
+                    status = hci_subevent_le_connection_complete_get_status(packet);
+                    temp_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
+                } else {
+                    status = hci_subevent_le_enhanced_connection_complete_v1_get_status(packet);
+                    temp_handle = hci_subevent_le_enhanced_connection_complete_v1_get_connection_handle(packet);
+                }
+
+                if (status == 0 && temp_handle != 0xFFFF) { // Status OK
+                    // current->_con_handle = little_endian_read_16(packet, 4);
+                    current->_con_handle = temp_handle;
                     current->_connected = true;
                     // printf("BuWizz [0x%04x]: ✔ Verbunden!\n", current->_con_handle);
                     printf("[INFO] Connected - Current Brick MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
@@ -201,6 +256,13 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 else {
                     // Fehler-Fall: Reset, damit die Main-Task es neu versuchen kann
                     current->_connect_triggered = false;
+                    current->_connected = false;
+                    current->_mode_set = false;
+                    current->_char_found = false;
+                    current->_motor_handle = 0;
+                    current->_con_handle = HCI_CON_HANDLE_INVALID;
+                    current->_connected_at = 0;
+
                     printf("BuWizz: Connect Fehler 0x%02X. Scan Restart.\n", packet[3]);
                     uni_bt_le_scan_start();
                 }
@@ -393,7 +455,7 @@ void BuWizz::triggerConnect(uint64_t now) {
             _start_connecting_time = now;
         } 
 
-        if (now - _start_connecting_time > 36000000) { // 10 -> 4.5Sek Timeout
+        if (now - _start_connecting_time > 3900000) { // 10 -> 4.5Sek Timeout
             printf("[WARN] Stein %02X Handshake Timeout. Resetting...\n",_addr[5]);
             gap_connect_cancel();
             _connect_triggered = false; // Reset um neuen Trigger zu erlauben
@@ -494,7 +556,15 @@ bool BuWizz::isReady() {
     return _connected && (_motor_handle != 0) && _mode_set; 
     }
 
-
+uint8_t BuWizz::triggerActive(){
+    uint8_t activeBricks = 0;
+    for(int i=0; i<NUM_BRICKS;i++){
+        if(mulBuWizz[i]->_connect_triggered){
+            activeBricks+=1;
+        }
+    }
+    return activeBricks;
+}
 
 
 void BuWizz::process() {
