@@ -24,23 +24,24 @@ extern "C" {
 
 extern MyControllerConfig controllers[4];
 extern ControllerEventManager eventManager;
-// // HIER wird das Objekt physikalisch erzeugt
-// BuWizz buwizz;
 
+// // HIER wird das Objekt physikalisch erzeugt
 // Definition der Adressen
 static bd_addr_t BuWizz_ADDR1 = {0x50, 0xFA, 0xAB, 0x6D, 0x03, 0x4C};
 static bd_addr_t BuWizz_ADDR2  = {0x50, 0xFA, 0xAB, 0x6D, 0x48, 0x70}; // Beispiel
 static bd_addr_t BuWizz_ADDR3  = {0x50, 0xFA, 0xAB, 0xBA, 0x2A, 0x96}; // Beispiel
-// static bd_addr_t BuWizz_ADDR2  = {0x50, 0xFA, 0xAB, 0x6D, 0x51, 0xDE}; // Beispiel
+static bd_addr_t BuWizz_ADDR4  = {0x50, 0xFA, 0xAB, 0x6D, 0x51, 0xDE}; // Beispiel
 
 // Die Objekte werden mit den Adressen erstellt
 BuWizz bwz1(BuWizz_ADDR1);
 BuWizz bwz2(BuWizz_ADDR2);
 BuWizz bwz3(BuWizz_ADDR3);
+BuWizz bwz4(BuWizz_ADDR4);
 
 // Wir machen sie in einem Array für den Handler zugänglich (in buwizz.cpp oder platform.cpp)
-// BuWizz* mulBuWizz[] = { &bwz1, &bwz2 };
-BuWizz* mulBuWizz[] = { &bwz2, &bwz1 };
+BuWizz* mulBuWizz[] = { &bwz2, &bwz1, &bwz4 };
+// BuWizz* mulBuWizz[] = { &bwz2, &bwz1 };
+
 // const int NUM_BRICKS = 2;
 const int NUM_BRICKS = sizeof(mulBuWizz) / sizeof(mulBuWizz[0]);
 
@@ -298,7 +299,7 @@ void myMainTask(void* p) {
     uint64_t last = esp_timer_get_time(); // µs
     static uint64_t last_scan_retry = 0;
     static bool missing = false;
-    // static bool all_connected = false;
+
     static bool all_ready = true;
     static bool any_trigger = false;
 
@@ -413,7 +414,7 @@ void myMainTask(void* p) {
             // BuWizz* b = mulBuWizz[current_brick_idx];
 
             // Sicherheits-Check: Nur senden, wenn Stein initialisiert
-            if (all_ready) {
+            if (all_ready && NUM_BRICKS >0) {
                 // Hier kommen später die Stick-Werte rein
                 // mulBuWizz[current_brick_idx]->setMotors(60, 60, 60, 60);
                 mulBuWizz[current_brick_idx]->useMotors();
