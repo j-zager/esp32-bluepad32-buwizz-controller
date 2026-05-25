@@ -155,24 +155,27 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 }
             }
         }
+
         // Falls wir das Objekt über die MAC bei LE_META Events (0x3E) nicht direkt haben,
         // lesen wir das Handle an der offiziellen HCI-Meta-Stelle (Byte 4) aus.
         if (!current && subevent != HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
-
             if(subevent == HCI_SUBEVENT_LE_CONNECTION_COMPLETE){
                 con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet); // 0x01 HCI_SUBEVENT_LE_CONNECTION_COMPLETE
                 printf("[IDENT] Scan-Treffer für Stein: <> HCI_SUBEVENT_LE_CONNECTION_COMPLETE <> via con_handle:%02X in subevent: %02X\n", con_handle,subevent); 
             }
+            else if(subevent == HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1){
+                con_handle = hci_subevent_le_enhanced_connection_complete_v1_get_connection_handle(packet); // 0x0A HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1
+                printf("[IDENT] Scan-Treffer für Stein: <> HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE_V1 <> via con_handle:%02X in subevent: %02X\n", con_handle,subevent); 
+            }
             else if(subevent == HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE){
                 con_handle = hci_subevent_le_connection_update_complete_get_connection_handle(packet);// 0x03 HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE
                 printf("[IDENT] Scan-Treffer für Stein: <> HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE <> via con_handle:%02X in subevent: %02X\n", con_handle,subevent); 
-            }else{
+            }
+            else{
                 con_handle = little_endian_read_16(packet, 4);
                 printf("[IDENT] Scan-Treffer für Stein: <> non HCI_SUBEVENT_LE_ADVERTISING_REPORT <> via con_handle:%02X in subevent: %02X\n", con_handle,subevent); 
             }
-
         }
-
     }
     // --- B) IDENTIFIZIERUNG ÜBER HANDLE (Bei laufender Kommunikation) ---
     else if (event == HCI_EVENT_DISCONNECTION_COMPLETE) {
@@ -327,14 +330,14 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 
             // PHASE 1: Service-Suche beendet, starte Characteristic-Suche
             if (current->service_found && current->_motor_handle == 0) {
-                printf("BuWizz: Service-Suche fertig. Suche jetzt Characteristics...\n");
+                printf("[DEBUG] [SERVICE] BuWizz: Service-Suche fertig. Suche jetzt Characteristics...\n");
                 gatt_client_discover_characteristics_for_service_by_uuid16(
                     &BuWizz::packetHandler, current->_con_handle, &current->buwizz_service, BUWIZZ_CHAR_UUID16);
                 current->service_found = false;
             }
             // PHASE 2: Characteristic-Suche beendet (Motor-Handle ist nun bekannt)
             else if (current->_motor_handle != 0) {
-                printf("BuWizz [0x%04X]: Discovery vollständig abgeschlossen.\n", current->_con_handle);
+                printf("[DEBUG] [SERVICE] BuWizz [0x%04X]: Discovery vollständig abgeschlossen.\n", current->_con_handle);
                 
                 // --- INTELLIGENTER SCAN-STOP ---
                 bool all_bricks_ready = true;
@@ -354,7 +357,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             // --- DIE ENTSCHEIDENDE RETTUNG BEI KRYPTO-HÄNGERN ---
             else {
                 // Suche beendet, aber weder Service gefunden noch Motor-Handle da!
-                printf("[WARN] BuWizz [0x%02X]: Discovery fehlgeschlagen (Krypto-Blockade). Erzwinge Disconnect handle [0x%04X] ...\n", current->_addr[5],current->_con_handle);
+                printf("[ERROR] [GATT_EVENT_QUERY_COMPLETE] BuWizz [0x%02X]: Discovery fehlgeschlagen (Krypto-Blockade). Erzwinge Disconnect handle [0x%04X] ...\n", current->_addr[5],current->_con_handle);
                 
                 // Wir kappen die fehlerhafte Geister-Verbindung aktiv auf Hardware-Ebene!
                 gap_disconnect(current->_con_handle); 
@@ -447,12 +450,6 @@ void BuWizz::setMotors(int8_t m1, int8_t m2, int8_t m3, int8_t m4) {
     _motor_payload[4] = (uint8_t)m4;
     _motor_payload[5] = 0x00; // Brake Mask (0 = Ausrollen)
 
-    // _mode_counter++;
-    // if (_mode_counter >= 50) {
-    //     this->setMode(3);
-    //     _mode_counter = 0;
-    // }
-
     // DEBUG PRINT (nur alle 2 Sekunden, sonst Log-Spam)
     static uint64_t last_print = 0;
     if (esp_timer_get_time() - last_print > 2000000) {
@@ -512,12 +509,16 @@ void BuWizz::triggerConnect(uint64_t now) {
             _start_connecting_time = now;
         } 
 
-        if (now - _start_connecting_time > 3900000) { // 10 -> 4.5Sek Timeout
-            printf("[WARN] Stein %02X Handshake Timeout. Resetting...\n",_addr[5]);
+        uint64_t dynamic_brickcount_timeout = 4500000;
+        if(triggerActive() == 2) dynamic_brickcount_timeout = 5500000; // 5,5s
+        else if(triggerActive() == 3) dynamic_brickcount_timeout = 8500000; // 8,5s
+        else if(triggerActive() > 3) dynamic_brickcount_timeout = 15500000; // 15,5s
+        
+        if (now - _start_connecting_time > dynamic_brickcount_timeout) { //Timeout
+            printf("[ERROR][TIMEOUT] Stein %02X Handshake Timeout. Resetting...\n",_addr[5]);
             gap_connect_cancel();
             _connect_triggered = false; // Reset um neuen Trigger zu erlauben
             _start_connecting_time = 0;
-            // WICHTIG: Nach einem Timeout sofort den Scan wieder anwerfen!
             _motor_handle = 0;
             _con_handle = HCI_CON_HANDLE_INVALID;
             _char_found = false;
