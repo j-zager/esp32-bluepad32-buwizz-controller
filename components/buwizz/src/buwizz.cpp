@@ -67,6 +67,24 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
     // --------------------Filter Events-------------------------------------------------------------
     // can be used to check if controller is readey scan start / stop /// gap disconnect / cancel
     if (event == HCI_EVENT_COMMAND_COMPLETE) {
+        uint16_t opcode = hci_event_command_complete_get_command_opcode(packet);
+        
+        // 0x200C ist der offizielle Befehl für LE Scan Enable (Start/Stop)
+        if (opcode == HCI_OPCODE_HCI_LE_SET_SCAN_ENABLE) {
+            for (int i = 0; i < NUM_BRICKS; i++) {
+                // Wenn ein Stein im Speicher signalisiert hat, dass er auf den Stop wartet:
+                if (mulBuWizz[i]->_waiting_for_scan_stop) {
+                    mulBuWizz[i]->_waiting_for_scan_stop = false; // Tor frei
+                    
+                    printf("BuWizz [%02X]: Hardware meldet Scan-Stop abgeschlossen! Verbinde...\n", mulBuWizz[i]->_addr[5]);
+                    printf("gap connect packet type:%02X\n",(bd_addr_type_t)packet[5]);
+                    // Jetzt schießt der Connect auf einer völlig freien Antenne raus!
+                    // gap_connect(mulBuWizz[i]->_addr, (bd_addr_type_t)0); 
+                    gap_connect(mulBuWizz[i]->_addr, (bd_addr_type_t)mulBuWizz[i]->_address_type);
+                    break;
+                }
+            }
+        }
         return; 
     }
     // can be used to check free buffer
@@ -116,7 +134,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             for (int i = 0; i < NUM_BRICKS; i++) {
                 if (memcmp(connect_mac, mulBuWizz[i]->_addr, 6) == 0) { 
                     current = mulBuWizz[i]; 
-                    printf("[IDENT] [CON] Scan-Treffer für Stein: %02X <> id%d <> via connnect_mac\n", connect_mac[5], i);
+                    printf("[IDENT] [CON] Scan-Treffer für Stein: %02X <> id%d <> via connnect_mac >>event:%02X >subevent %02X\n", connect_mac[5], i,event,subevent);
                     break; 
                 }
             }
@@ -242,7 +260,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             // SCHRITT 1: BuWizz im Scan finden
             if (subevent == HCI_SUBEVENT_LE_ADVERTISING_REPORT) {
                 //  Sofortige harte Sperre: Wenn getriggert oder verbunden -> ABBRUCH
-                if (current->_connected || current->_connect_triggered) {
+                if (current->_connected || current->_connect_triggered || current->waitingActive()>0) {
                     return; 
                 }
                 if (!current->_connected && !current->_connect_triggered) {
@@ -252,8 +270,10 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     printf("[INFO] BuWizz: Gefunden! Verbinde...\n");
                     current->_connect_triggered = true;
                     uni_bt_le_scan_stop();
-                    printf("gap connect packet type:%02X\n",(bd_addr_type_t)packet[5]);
-                    gap_connect(current->_addr, (bd_addr_type_t)packet[5]);
+                    current->_address_type = (bd_addr_type_t)packet[5]; 
+                    current->_waiting_for_scan_stop = true;
+                    // printf("gap connect packet type:%02X\n",(bd_addr_type_t)packet[5]);
+                    // gap_connect(current->_addr, (bd_addr_type_t)packet[5]);
                 }
             }
             // SCHRITT 2: Verbindung erfolgreich
@@ -289,7 +309,8 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     current->_connect_triggered = false;
                     current->_was_connected = true;
                     // Wichtig hier nicht Scan aktivieren
-                    // Sofortige Service-Suche (UUID128 vorwärts)
+                    // // Sofortige Service-Suche (UUID128 vorwärts)
+                    current->_service_search_active = true;
                     gatt_client_discover_primary_services_by_uuid128(
                         &BuWizz::packetHandler, current->_con_handle, BUWIZZ_SERVICE_UUID128);
                 }
@@ -302,6 +323,8 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     current->_motor_handle = 0;
                     current->_con_handle = HCI_CON_HANDLE_INVALID;
                     current->_connected_at = 0;
+                    current->_service_search_active = false;
+                    current->_waiting_for_scan_stop = false;
 
                     printf("[DEBUG][CONNECT ERROR]BuWizz: Connect Fehler 0x%02X. Scan Restart: handle 0x%02x\n", status,temp_handle);
                     uni_bt_le_scan_start();
@@ -319,6 +342,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 current->_addr[3], current->_addr[4], current->_addr[5]);
             gatt_event_service_query_result_get_service(packet, &current->buwizz_service);
             current->service_found = true;
+            current->_service_search_active = false;
             break;
 
 
@@ -369,6 +393,8 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 current->_char_found = false;
                 current->_motor_handle = 0;
                 current->_connected_at = 0;
+                current->_service_search_active = false;
+                current->_waiting_for_scan_stop = false;
             }
             break;
 
@@ -417,6 +443,8 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             current->_mode_set = false;
             current->_start_connecting_time = 0;
             current->_connected_at = 0;
+            current->_service_search_active = false;
+            current->_waiting_for_scan_stop = false;
             // Wenn alle getrennt sind, Scan wieder starten
             uni_bt_le_scan_start(); 
             break;
@@ -524,7 +552,8 @@ void BuWizz::triggerConnect(uint64_t now) {
             _char_found = false;
             _mode_set = false;
             _connected_at = 0;
-            //uni_bt_le_scan_start(); 
+            _service_search_active = false;
+            _waiting_for_scan_stop = false;
         }
     } else if(_connected){
         // Wenn verbunden, Timeout-Timer sauber schlafen legen
@@ -622,6 +651,16 @@ uint8_t BuWizz::triggerActive(){
         }
     }
     return activeBricks;
+}
+
+uint8_t BuWizz::waitingActive(){
+    uint8_t waitingForStopBricks = 0;
+    for(int i=0; i<NUM_BRICKS;i++){
+        if(mulBuWizz[i]->_waiting_for_scan_stop){
+            waitingForStopBricks+=1;
+        }
+    }
+    return waitingForStopBricks;
 }
 
 

@@ -31,6 +31,7 @@ public:
     hci_con_handle_t getConnectHandle();
     bool isReady();
     uint8_t triggerActive();
+    uint8_t waitingActive();
     uint8_t getAddr(int id);
     void saveMotor(int8_t m, int8_t idx);
     uint8_t getMotor( int8_t idx);
@@ -46,12 +47,15 @@ private:
     hci_con_handle_t _con_handle = HCI_CON_HANDLE_INVALID;
     // bd_addr_t _addr = {0x50, 0xFA, 0xAB, 0x6D, 0x03, 0x4C};
     bd_addr_t _addr;
+    bd_addr_type_t _address_type = BD_ADDR_TYPE_LE_PUBLIC;
     bool _connected = false;
     bool _was_connected = false;        // nutzen zum reconnect nach Stein schonmal erfolgreich gefunden wurde
     uint16_t _motor_handle = 0; 
 
     gatt_client_service_t buwizz_service;
+    bool _service_search_active = false;
     bool service_found;
+    bool _waiting_for_scan_stop  = false;
 
     uint8_t _motor_payload[6]; // Hier ist der Speicher sicher
     uint8_t _mode_payload[2];
