@@ -76,8 +76,8 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 if (mulBuWizz[i]->_waiting_for_scan_stop) {
                     mulBuWizz[i]->_waiting_for_scan_stop = false; // Tor frei
                     
-                    printf("BuWizz [%02X]: Hardware meldet Scan-Stop abgeschlossen! Verbinde...\n", mulBuWizz[i]->_addr[5]);
-                    printf("gap connect packet type:%02X\n",(bd_addr_type_t)packet[5]);
+                    printf("[INFO] BuWizz [%02X]: Hardware meldet Scan-Stop abgeschlossen! Verbinde...\n", mulBuWizz[i]->_addr[5]);
+                    printf("[INFO] gap connect packet type:%02X\n",(bd_addr_type_t)packet[5]);
                     // Jetzt schießt der Connect auf einer völlig freien Antenne raus!
                     // gap_connect(mulBuWizz[i]->_addr, (bd_addr_type_t)0); 
                     gap_connect(mulBuWizz[i]->_addr, (bd_addr_type_t)mulBuWizz[i]->_address_type);
@@ -112,7 +112,6 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
     // --- 1. WER IST DER ABSENDER? ---
     if (event == HCI_EVENT_LE_META) {
         uint8_t subevent = hci_event_le_meta_get_subevent_code(packet);
-        // printf("status ok=0 -> check status :%d\n",packet[3]);
 
         //  Beim Scan-Report (0x02) liegt die MAC ab Index 6 rückwärts
         if (subevent == HCI_SUBEVENT_LE_ADVERTISING_REPORT) { // SCAN: Über MAC finden
@@ -121,7 +120,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             for (int i = 0; i < NUM_BRICKS; i++) {
                 if (memcmp(scan_mac, mulBuWizz[i]->_addr, 6) == 0) { 
                     current = mulBuWizz[i]; 
-                    printf("[IDENT] Scan-Treffer für Stein: %02X <> id: %d <> via scan_mac\n", current->_addr[5], i);
+                    printf("[IDENT] Scan-Treffer für Stein: %02X <> id: %d <> via scan_mac >>event:%02X >subevent %02X \n", current->_addr[5], i,event,subevent);
                     break; 
                 }
             }
@@ -145,7 +144,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             for (int i = 0; i < NUM_BRICKS; i++) {
                 if (memcmp(connect_mac, mulBuWizz[i]->_addr, 6) == 0) { 
                     current = mulBuWizz[i]; 
-                    printf("[IDENT] [CON_V1] Scan-Treffer für Stein: %02X <> id%d <> via connnect_mac\n", connect_mac[5], i);
+                    printf("[IDENT] [CON_V1] Scan-Treffer für Stein: %02X <> id%d <> via connnect_V1_mac >>event:%02X >subevent %02X\n", connect_mac[5], i,event,subevent);
                     break; 
                 }
             }
@@ -236,9 +235,6 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 if (mulBuWizz[i]->_connect_triggered && !mulBuWizz[i]->_connected && mulBuWizz[i]->triggerActive() == 1) {
                     current = mulBuWizz[i];
                     printf("[IDENT] >>> HARDWARE-FEHLER (Handle 0xFFFF): %02X <> id%d <> via leftover connect_trigger handle:%02X in event: %02X\n", current->_addr[5], i,con_handle,event);
-                    
-                    // mulBuWizz[i]->_connect_triggered = false;
-                    // printf("[IDENT] >>> HARDWARE-FEHLER (Handle 0xFFFF): %02X <> id%d <> via leftover connect_trigger handle:%02X in event: %02X\n", mulBuWizz[i]->_addr[5], i,con_handle,event);
                     break;
                 }
             }
@@ -329,9 +325,33 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     printf("[DEBUG][CONNECT ERROR]BuWizz: Connect Fehler 0x%02X. Scan Restart: handle 0x%02x\n", status,temp_handle);
                     uni_bt_le_scan_start();
                 }
-
-
-
+            }
+                        // SCHRITT 3: Hardware-Verbindung stabilisiert (Subevent 0x03)
+            else if (subevent == HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE) {
+                uint8_t status = hci_subevent_le_connection_update_complete_get_status(packet);; // Status des Updates
+                
+                if (status == 0 && current->_service_search_active == false) {
+                    // Wir holen das Handle offset-sicher für Subevent 0x03
+                    hci_con_handle_t update_handle = hci_subevent_le_connection_update_complete_get_connection_handle(packet);
+                    
+                    // Suche den passenden Stein im Array
+                    for (int i = 0; i < NUM_BRICKS; i++) {
+                        if (mulBuWizz[i]->_con_handle == update_handle && mulBuWizz[i]->_connected) {
+                            
+                            // // WICHTIG FÜR DIE REAL-TIME STEUERUNG:
+                            // // Hier erzwingen wir sofort die schnellstmögliche Latenz (z.B. 20ms = 0x0010)!
+                            // // Parameter: handle, interval_min (20ms), interval_max (40ms), latency (0), timeout (3s)
+                            // gap_request_connection_parameter_update(update_handle, 0x0010, 0x0020, 0x0000, 0x012C);
+                            
+                            printf("[DEBUG][HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE]BuWizz [0x%04X]: Hardware bereit! Starte primäre Service-Suche...\n", update_handle);
+                            current->_service_search_active = true;
+                            // Start im originalen Bluetooth-Thread-Kontext!
+                            gatt_client_discover_primary_services_by_uuid128(
+                                &BuWizz::packetHandler, update_handle, BUWIZZ_SERVICE_UUID128);
+                            break;
+                        }
+                    }
+                }
             }
         } break;
 
@@ -384,7 +404,7 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 printf("[ERROR] [GATT_EVENT_QUERY_COMPLETE] BuWizz [0x%02X]: Discovery fehlgeschlagen (Krypto-Blockade). Erzwinge Disconnect handle [0x%04X] ...\n", current->_addr[5],current->_con_handle);
                 
                 // Wir kappen die fehlerhafte Geister-Verbindung aktiv auf Hardware-Ebene!
-                gap_disconnect(current->_con_handle); 
+                //gap_disconnect(current->_con_handle); eventuell gar nicht nötig bzw stört weiteren scan
                 
                 // Alle Flags im Objekt säubern, damit der nächste Versuch frisch startet
                 current->_connected = false;
