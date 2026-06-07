@@ -293,7 +293,6 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 }
 
                 if (status == 0 && temp_handle != 0xFFFF) { // Status OK
-                    // current->_con_handle = little_endian_read_16(packet, 4);
                     current->_con_handle = temp_handle;
                     current->_connected = true;
                     // printf("BuWizz [0x%04x]: ✔ Verbunden!\n", current->_con_handle);
@@ -312,15 +311,17 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 }
                 else {
                     // Fehler-Fall: Reset, damit die Main-Task es neu versuchen kann
-                    current->_connect_triggered = false;
-                    current->_connected = false;
-                    current->_mode_set = false;
-                    current->_char_found = false;
-                    current->_motor_handle = 0;
-                    current->_con_handle = HCI_CON_HANDLE_INVALID;
-                    current->_connected_at = 0;
-                    current->_service_search_active = false;
-                    current->_waiting_for_scan_stop = false;
+                    // current->_connect_triggered = false;
+                    // current->_connected = false;
+                    // current->_mode_set = false;
+                    // current->_char_found = false;
+                    // current->_motor_handle = 0;
+                    // current->_con_handle = HCI_CON_HANDLE_INVALID;
+                    // current->_connected_at = 0;
+                    // current->_service_search_active = false;
+                    // current->_waiting_for_scan_stop = false;
+                    // current->_start_connecting_time = 0;
+                    current->hardReset(esp_timer_get_time());
 
                     printf("[DEBUG][CONNECT ERROR]BuWizz: Connect Fehler 0x%02X. Scan Restart: handle 0x%02x\n", status,temp_handle);
                     uni_bt_le_scan_start();
@@ -401,20 +402,23 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             // --- DIE ENTSCHEIDENDE RETTUNG BEI KRYPTO-HÄNGERN ---
             else {
                 // Suche beendet, aber weder Service gefunden noch Motor-Handle da!
-                printf("[ERROR] [GATT_EVENT_QUERY_COMPLETE] BuWizz [0x%02X]: Discovery fehlgeschlagen (Krypto-Blockade). Erzwinge Disconnect handle [0x%04X] ...\n", current->_addr[5],current->_con_handle);
+                printf("[ERROR] [GATT_EVENT_QUERY_COMPLETE] BuWizz [0x%02X]: Discovery fehlgeschlagen.Reset parameter & handle [0x%04X] ...\n", current->_addr[5],current->_con_handle);
                 
                 // Wir kappen die fehlerhafte Geister-Verbindung aktiv auf Hardware-Ebene!
                 //gap_disconnect(current->_con_handle); eventuell gar nicht nötig bzw stört weiteren scan
                 
                 // Alle Flags im Objekt säubern, damit der nächste Versuch frisch startet
-                current->_connected = false;
-                current->_connect_triggered = false;
-                current->_mode_set = false;
-                current->_char_found = false;
-                current->_motor_handle = 0;
-                current->_connected_at = 0;
-                current->_service_search_active = false;
-                current->_waiting_for_scan_stop = false;
+                // current->_connected = false;
+                // current->_connect_triggered = false;
+                // current->_mode_set = false;
+                // current->_char_found = false;
+                // current->_motor_handle = 0;
+                // current->_con_handle = HCI_CON_HANDLE_INVALID;
+                // current->_connected_at = 0;
+                // current->_service_search_active = false;
+                // current->_waiting_for_scan_stop = false;
+                // current->_start_connecting_time = 0;
+                current->hardReset(esp_timer_get_time());
             }
             break;
 
@@ -455,16 +459,17 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             gap_drop_link_key_for_bd_addr(current->_addr);
 
             printf("BuWizz [0x%04x]: ❌ Getrennt.\n", current->_con_handle);
-            current->_connected = false;
-            current->_motor_handle = 0;
-            current->_con_handle = HCI_CON_HANDLE_INVALID;
-            current->_char_found = false;
-            current->_connect_triggered = false; // Zur Sicherheit freischalten
-            current->_mode_set = false;
-            current->_start_connecting_time = 0;
-            current->_connected_at = 0;
-            current->_service_search_active = false;
-            current->_waiting_for_scan_stop = false;
+            // current->_connected = false;
+            // current->_motor_handle = 0;
+            // current->_con_handle = HCI_CON_HANDLE_INVALID;
+            // current->_char_found = false;
+            // current->_connect_triggered = false; // Zur Sicherheit freischalten
+            // current->_mode_set = false;
+            // current->_connected_at = 0;
+            // current->_service_search_active = false;
+            // current->_waiting_for_scan_stop = false;
+            // current->_start_connecting_time = 0;
+            current->hardReset(esp_timer_get_time());
             // Wenn alle getrennt sind, Scan wieder starten
             uni_bt_le_scan_start(); 
             break;
@@ -565,15 +570,17 @@ void BuWizz::triggerConnect(uint64_t now) {
         if (now - _start_connecting_time > dynamic_brickcount_timeout) { //Timeout
             printf("[ERROR][TIMEOUT] Stein %02X Handshake Timeout. Resetting...\n",_addr[5]);
             gap_connect_cancel();
-            _connect_triggered = false; // Reset um neuen Trigger zu erlauben
-            _start_connecting_time = 0;
-            _motor_handle = 0;
-            _con_handle = HCI_CON_HANDLE_INVALID;
-            _char_found = false;
-            _mode_set = false;
-            _connected_at = 0;
-            _service_search_active = false;
-            _waiting_for_scan_stop = false;
+            // _connect_triggered = false; // Reset um neuen Trigger zu erlauben
+            // _connected = false;
+            // _start_connecting_time = 0;
+            // _motor_handle = 0;
+            // _con_handle = HCI_CON_HANDLE_INVALID;
+            // _char_found = false;
+            // _mode_set = false;
+            // _connected_at = 0;
+            // _service_search_active = false;
+            // _waiting_for_scan_stop = false;
+            this->hardReset(now);
         }
     } else if(_connected){
         // Wenn verbunden, Timeout-Timer sauber schlafen legen
@@ -682,6 +689,20 @@ uint8_t BuWizz::waitingActive(){
     }
     return waitingForStopBricks;
 }
+
+void BuWizz::hardReset(uint64_t now) {
+    _connect_triggered = false;
+    _connected = false;
+    _mode_set = false;
+    _char_found = false;
+    _motor_handle = 0;
+    _con_handle = HCI_CON_HANDLE_INVALID;
+    _connected_at = 0;
+    _service_search_active = false;
+    _waiting_for_scan_stop = false;
+    _start_connecting_time = 0;
+}
+
 
 
 void BuWizz::process() {

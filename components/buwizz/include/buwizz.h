@@ -22,6 +22,7 @@ public:
     void requestBattery();
     // void update(uint64_t now);
     void triggerConnect(uint64_t now);
+    void hardReset(uint64_t now);
     
     bool isConnected();
     bool wasConnected();
