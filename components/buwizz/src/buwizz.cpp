@@ -329,11 +329,10 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                     // connect trigger freigeben wenn verbunden
                     current->_connect_triggered = false;
                     current->_was_connected = true;
-                    // Wichtig hier nicht Scan aktivieren
-                    // // Sofortige Service-Suche (UUID128 vorwärts)
-                    current->_service_search_active = true;
-                    gatt_client_discover_primary_services_by_uuid128(
-                        &BuWizz::packetHandler, current->_con_handle, BUWIZZ_SERVICE_UUID128);
+
+                    // current->_service_search_active = true;
+                    // gatt_client_discover_primary_services_by_uuid128(
+                    //     &BuWizz::packetHandler, current->_con_handle, BUWIZZ_SERVICE_UUID128);
                 }
                 else {
                     // Fehler-Fall: Reset, damit die Main-Task es neu versuchen kann
@@ -732,6 +731,10 @@ uint8_t BuWizz::waitingActive(){
 }
 
 void BuWizz::hardReset(uint64_t now) {
+
+    if (_con_handle != HCI_CON_HANDLE_INVALID) {
+        sm_bonding_decline(_con_handle); 
+    }
     _connect_triggered = false;
     _connected = false;
     _mode_set = false;
