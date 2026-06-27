@@ -197,7 +197,33 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
     // --- B) IDENTIFIZIERUNG ÜBER HANDLE (Bei laufender Kommunikation) ---
     else if (event == HCI_EVENT_DISCONNECTION_COMPLETE) {
         con_handle = hci_event_disconnection_complete_get_connection_handle(packet);
-    } 
+    }
+    else if (event == HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS) {
+        uint8_t num_handles = packet[2]; // Anzahl der Handles im Paket
+        
+        // Wir scannen alle im Paket enthaltenen Handles live ab
+        for (uint8_t h_idx = 0; h_idx < num_handles; h_idx++) {
+            uint16_t offset = 3 + (h_idx * 4);
+            uint16_t packet_handle = little_endian_read_16(packet, offset);
+            // hci_con_handle_t packet_handle = hci_event_number_of_completed_packets_get_connection_handle(packet, h_idx);
+            
+            for (int i = 0; i < NUM_BRICKS; i++) {
+                // Wir suchen gezielt den Stein, der online ist, aber dessen GATT-Suche noch wartet!
+                if (mulBuWizz[i]->_con_handle == packet_handle && 
+                    mulBuWizz[i]->_connected && 
+                    mulBuWizz[i]->_service_search_active == false && 
+                    mulBuWizz[i]->_motor_handle == 0) {
+                    
+                    // Treffer! Wir weisen das Handle fest zu. 
+                    con_handle = packet_handle;
+                    current = mulBuWizz[i]; // Direkt hier fest zuweisen!
+                    printf("[IDENT] Scan-Treffer für Stein: <> HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS <> via con_handle:%02X in event: %02X\n", con_handle,event); 
+                    break;
+                }
+            }
+            if (current) break; // Wenn wir den suchenden Stein gefunden haben, Loop beenden
+        }
+    }
     // else if (event == HCI_EVENT_TRANSPORT_PACKET_SENT){
     //     con_handle = little_endian_read_16(packet, 2);
     //     printf("[IDENT] HCI_EVENT_TRANSPORT_PACKET_SENT <> via con_handle:%02X in event: %02X\n",con_handle,event);
@@ -355,6 +381,21 @@ void BuWizz::packetHandler(uint8_t packet_type, uint16_t channel, uint8_t *packe
                 }
             }
         } break;
+
+
+        case HCI_EVENT_NUMBER_OF_COMPLETED_PACKETS: { // Event 0x0F
+            // Sobald der Controller meldet: "Hardware-Puffer für diesen Stein ist frei!"
+            if (current->_connected && current->_service_search_active == false && current->_motor_handle == 0) {
+                
+                current->_service_search_active = true; // Tor schließen
+                
+                printf("BuWizz [0x%04X]: >>> HCI-Puffer frei und Antenne bereit! Starte primäre Service-Suche... <<<\n", current->_con_handle);
+                
+                gatt_client_discover_primary_services_by_uuid128(
+                    &BuWizz::packetHandler, current->_con_handle, BUWIZZ_SERVICE_UUID128);
+            }
+            break;
+        }
 
         case GATT_EVENT_SERVICE_QUERY_RESULT:
             // Wir speichern den Service nur zwischen!

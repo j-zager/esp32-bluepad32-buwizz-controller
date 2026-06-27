@@ -347,7 +347,7 @@ void myMainTask(void* p) {
 
 
         // 1. Verbinde und Reverbinde Logik
-        if (now - last_scan_retry > 2000000) { // Alle 4 -> 3s Sekunden prüfen
+        if (now - last_scan_retry > 3000000) { // Alle 4 -> 3s Sekunden prüfen
             // all_connected = true;
             missing = false;
             all_ready = true;
