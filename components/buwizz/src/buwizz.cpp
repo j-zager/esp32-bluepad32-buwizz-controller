@@ -652,10 +652,11 @@ void BuWizz::triggerConnect(uint64_t now) {
 
 
 void BuWizz::saveMotor(int8_t m, int8_t idx) {
-    if (idx<0 || idx> 5) return ;
+    if (idx<1 || idx> 5) return ;
 
     // Wir füllen das Array in der Klasse
-    _motor_payload[idx] = m; // Command: Set Motor Data
+    _motor_payload[0] = 0x10; // Command: Set Motor Data
+    _motor_payload[idx] = (uint8_t)m; // Command: Set Motor Data
     return;
 }
 uint8_t BuWizz::getMotor( int8_t idx) {

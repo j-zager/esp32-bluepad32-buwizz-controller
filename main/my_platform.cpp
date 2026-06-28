@@ -39,7 +39,7 @@ BuWizz bwz3(BuWizz_ADDR3);
 BuWizz bwz4(BuWizz_ADDR4);
 
 // Wir machen sie in einem Array für den Handler zugänglich (in buwizz.cpp oder platform.cpp)
-BuWizz* mulBuWizz[] = { &bwz2, &bwz1, &bwz4 };
+BuWizz* mulBuWizz[] = { &bwz1, &bwz2, &bwz4 };
 // BuWizz* mulBuWizz[] = { &bwz2, &bwz1 };
 
 // const int NUM_BRICKS = 2;

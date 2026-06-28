@@ -3,8 +3,10 @@
 #include "slot_helpers.h"
 #include "MyControllerConfig.h"
 #include "driver/gpio.h"
+#include "buwizz.h"
 
 extern MyControllerConfig controllers[4];
+extern BuWizz* mulBuWizz[];
 
 static const char* TAG = "ControllerEventManager";
 
@@ -26,22 +28,29 @@ void ControllerEventManager::process() {
 
         case EVENT_PRESS:
             ESP_LOGI(TAG, "[PRESS] slot=%d %s", ev.slot, ev.name);
+            {
+                if (strcmp(ev.name, "up") == 0)
+                    controllers[ev.slot].setColor(0, 255, 0);
 
-            if (strcmp(ev.name, "up") == 0)
-                controllers[ev.slot].setColor(0, 255, 0);
+                if (strcmp(ev.name, "down") == 0)
+                    controllers[ev.slot].setColor(255, 0, 0);
 
-            if (strcmp(ev.name, "down") == 0)
-                controllers[ev.slot].setColor(255, 0, 0);
+                if (strcmp(ev.name, "circle") == 0)
+                    controllers[ev.slot].rumble(255, 0, 200);
 
-            if (strcmp(ev.name, "circle") == 0)
-                controllers[ev.slot].rumble(255, 0, 200);
+                if (strcmp(ev.name, "left") == 0)
+                    gpio_set_level(GPIO_NUM_2, 1);
 
-            if (strcmp(ev.name, "left") == 0)
-                gpio_set_level(GPIO_NUM_2, 1);
+                if (strcmp(ev.name, "right") == 0)
+                    gpio_set_level(GPIO_NUM_2, 0);
 
-            if (strcmp(ev.name, "right") == 0)
-                gpio_set_level(GPIO_NUM_2, 0);
-
+                if (strcmp(ev.name, "cross") == 0){
+                    mulBuWizz[0]->saveMotor(127,4);// 4C
+                }
+                if (strcmp(ev.name, "triangle") == 0){
+                    mulBuWizz[0]->saveMotor(0,4);// 4C
+                }
+            }
             break;
 
         case EVENT_RELEASE:
@@ -50,6 +59,19 @@ void ControllerEventManager::process() {
 
         case EVENT_STICK:
             ESP_LOGI(TAG, "[STICK] slot=%d %s x=%.2f y=%.2f", ev.slot, ev.name, ev.x, ev.y);
+            {
+                float drive = 0.0f;
+                if (strcmp(ev.name, "left") == 0) {
+                    drive = 127.0f * -ev.y; 
+                    mulBuWizz[0]->saveMotor(static_cast<int8_t>(drive),1);// 4C
+                    mulBuWizz[2]->saveMotor(static_cast<int8_t>(drive),3);// 70
+                } 
+                float steering = 0.0f;
+                if (strcmp(ev.name, "right") == 0) {
+                    steering = 127.0f * ev.x; 
+                    mulBuWizz[1]->saveMotor(static_cast<int8_t>(steering),4);//DE
+                } 
+            }
             break;
 
         case EVENT_TRIGGER:
@@ -72,7 +94,13 @@ void ControllerEventManager::process() {
 
         case EVENT_DOUBLEPRESS:
             ESP_LOGI(TAG, "[DOUBLE] slot=%d %s", ev.slot, ev.name);
-            controllers[ev.slot].setColor(255, 255, 0);
+            {
+                controllers[ev.slot].setColor(255, 255, 0);
+
+                if (strcmp(ev.name, "square") == 0){
+                    mulBuWizz[0]->saveMotor(0,4);// 4C
+                }
+            }
             break;
         case EVENT_ACCEL:
             break;
