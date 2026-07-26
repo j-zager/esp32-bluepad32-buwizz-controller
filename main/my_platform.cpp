@@ -20,10 +20,12 @@ extern "C" {
 
 #include "controllerEventManager.h"
 #include "buwizz.h"
+#include "LightManager.h"
 
 
 extern MyControllerConfig controllers[4];
 extern ControllerEventManager eventManager;
+extern LightManager lightManager;
 
 // // HIER wird das Objekt physikalisch erzeugt
 // Definition der Adressen
@@ -104,6 +106,7 @@ static void my_platform_on_init_complete(void) {
 
     // Pins initialisieren
     initPins();
+    lightManager.init();
     // Deine Task starten
     xTaskCreate(myMainTask, "my_task", 4096, NULL, 5, NULL);
 
@@ -341,6 +344,7 @@ void myMainTask(void* p) {
         }
 
         eventManager.process();
+        lightManager.process();
         // -----------------------------
         // MULTI-BUWIZZ HANDLING
         // -----------------------------

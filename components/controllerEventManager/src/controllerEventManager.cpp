@@ -4,9 +4,11 @@
 #include "MyControllerConfig.h"
 #include "driver/gpio.h"
 #include "buwizz.h"
+#include "LightManager.h"
 
 extern MyControllerConfig controllers[4];
 extern BuWizz* mulBuWizz[];
+extern LightManager lightManager;
 
 static const char* TAG = "ControllerEventManager";
 
@@ -99,6 +101,18 @@ void ControllerEventManager::process() {
 
                 if (strcmp(ev.name, "square") == 0){
                     mulBuWizz[0]->saveMotor(0,4);// 4C
+                }
+                            // Wenn Steuerkreuz LINKS doppelt gedrückt wird (Blinker Links an/aus)
+                if (strcmp(ev.name, "left") == 0) {
+                    static bool blinkLeftActive = false;
+                    
+                    // Zustand umkehren: Aus wird An, An wird Aus
+                    blinkLeftActive = !blinkLeftActive;
+                    
+                    // Funktion aufrufen: true schaltet das Flag an, false schaltet es und die LED sofort aus
+                    lightManager.setBlinkerLeftActive(blinkLeftActive);
+                    
+                    ESP_LOGI(TAG, "Blinker links auf %s geschaltet!", blinkLeftActive ? "AN" : "AUS");
                 }
             }
             break;

@@ -36,7 +36,8 @@ public:
     int getBattery() const;
     void updateBatteryLED(uint64_t now);
 
-
+    static bool isAnyControllerConnected(const MyControllerConfig* array, int size);
+   
 private:
     uni_hid_device_t* device = nullptr;
      int battery = -1;   // 0–100

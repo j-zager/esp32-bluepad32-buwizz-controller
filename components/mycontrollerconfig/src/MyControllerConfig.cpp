@@ -272,3 +272,12 @@ void MyControllerConfig::onDoublePress(const char* name) {
 }
 
 
+bool MyControllerConfig::isAnyControllerConnected(const MyControllerConfig* array, int size) {
+    for (int i = 0; i < size; i++) {
+        // check if any controller is active
+        if (array[i].hasGpActive()) { 
+            return true; // any controller is active
+        }
+    }
+    return false; // no controller is active
+}

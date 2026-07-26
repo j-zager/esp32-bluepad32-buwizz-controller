@@ -14,10 +14,13 @@
 
 #include "controllerEventManager.h"
 #include "MyControllerConfig.h"
+#include "LightManager.h"
 
 // Maximal 4 Controller
 MyControllerConfig controllers[4];
 ControllerEventManager eventManager;   
+
+LightManager lightManager(GPIO_NUM_19, GPIO_NUM_18, GPIO_NUM_23, GPIO_NUM_14);
 
 
 // Sanity check

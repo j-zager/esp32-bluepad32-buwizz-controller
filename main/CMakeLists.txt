@@ -29,4 +29,5 @@ idf_component_register(
         controllerEventManager
         slot_helpers
         buwizz
+        lightmanager
 )
